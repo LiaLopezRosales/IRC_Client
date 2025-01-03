@@ -1,5 +1,5 @@
 from server_handler import IRCServer
-from shared_constants import DEFAULT_HOST, DEFAULT_PORT
+from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT
 
 def run_server():
     try:

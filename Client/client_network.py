@@ -77,9 +77,6 @@ class ClientConnection:
                 self.pong(server_name)
                 return f"PONG enviado a {server_name}"
 
-            # elif response.startswith("PONG"):
-            #     print(f"[CLIENTE] PONG recibido: {response}")
-            
             return parse_message(response)
         
         except Exception as e:
@@ -137,16 +134,6 @@ class ClientConnection:
             self.send("PING", [server_name])
             print(f"[CLIENTE] PING enviado a {server_name}. Esperando PONG...")
             
-            # # Esperar la respuesta PONG
-            # response = self.receive()
-            # prefix, command, params, trailing = response if isinstance(response, tuple) else ("", "", "", "")
-            
-            # # Validar si es un PONG válido
-            # if command == "PONG" and server_name in params:
-            #     print(f"[CLIENTE] PONG recibido correctamente desde {server_name}")
-            # else:
-            #     print(f"[CLIENTE] PONG no recibido o inválido: {response}")
-
             # Esperar hasta recibir el PONG
             start_time = time.time()  # Marca el tiempo de inicio
             

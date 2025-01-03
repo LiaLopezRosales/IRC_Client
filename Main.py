@@ -1,6 +1,6 @@
 import argparse
-from client_main import run_client
-from server_main import run_server
+from Client.client_main import run_client
+from Server.server_main import run_server
 
 def main():
     parser = argparse.ArgumentParser(description="Sistema IRC con cliente y servidor.")
