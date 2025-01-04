@@ -2,7 +2,7 @@ import socket
 import ssl
 from threading import Thread
 
-class MockIRCServer:
+class IRCServer:
     """
     Servidor IRC simulado basado en el RFC 2812 para probar cliente.
     """
@@ -12,6 +12,9 @@ class MockIRCServer:
         self.server_socket = None
         self.running = False
         self.clients = {}  # Almacena clientes como {nickname: socket}
+        self.channels = {}  # {channel_name: {"users": [nicknames], "operators": [nicknames]}}
+
+#/connect -ssl 127.0.0.1 6667
 
     def start(self):
         """
@@ -59,7 +62,10 @@ class MockIRCServer:
                 # Procesar comandos
                 if data.startswith("NICK"):
                     nickname = data.split()[1]
-                    self.clients[nickname] = ssl_socket
+                    self.clients[nickname] = {
+                        "socket": ssl_socket,
+                        "modes": []  # Inicializar la lista de modos del usuario
+                    }
                     ssl_socket.sendall(f":mock.server 001 {nickname} :Bienvenido al servidor\r\n".encode('utf-8'))
                     print(f"[SERVER] Cliente registrado con NICK: {nickname}")
 
@@ -70,35 +76,91 @@ class MockIRCServer:
                 # Unirse a un canal
                     channel = data.split()[1]
                     if channel not in self.channels:
-                        self.channels[channel] = []
-                    if nickname not in self.channels[channel]:
-                        self.channels[channel].append(nickname)
-                    ssl_socket.sendall(f":mock.server 332 {nickname} {channel} :Bienvenido al canal {channel}\r\n".encode('utf-8'))
-                    print(f"[SERVER] {nickname} se unió al canal {channel}")
+                    # Crear canal con el primer usuario como operador
+                        self.channels[channel] = {"users": [nickname], "operators": [nickname]}
+                        print(f"[SERVER] Canal {channel} creado por {nickname}")
+                    else:
+                    # Agregar usuario al canal
+                        if nickname not in self.channels[channel]["users"]:
+                            self.channels[channel]["users"].append(nickname)
+                            ssl_socket.sendall(f":mock.server 332 {nickname} {channel} :Bienvenido al canal {channel}\r\n".encode('utf-8'))
+                            print(f"[SERVER] {nickname} se unió al canal {channel}")
                     
                     # Notificar a otros usuarios en el canal
-                    for user in self.channels[channel]:
+                    for user in self.channels[channel]["users"]:
                         if user != nickname:
-                            self.clients[user].sendall(f":{nickname} JOIN {channel}\r\n".encode('utf-8'))
+                            self.clients[user]["socket"].sendall(f":{nickname} JOIN {channel}\r\n".encode('utf-8'))
                     
+                
+                elif data.startswith("MODE"):
+                    parts = data.split()
+                    if len(parts) < 3:
+                        ssl_socket.sendall(f":mock.server 461 {nickname} MODE :Faltan parámetros\r\n".encode('utf-8'))
+                        continue
+
+                    target, mode = parts[1], parts[2]
+
+                    # Modo aplicado a un usuario
+                    if target in self.clients:
+                        if mode == "+i":
+                        # Establecer el modo invisible en el usuario
+                            if "+i" not in self.clients[target]["modes"]:
+                                self.clients[target]["modes"].append("+i")
+                                ssl_socket.sendall(f":mock.server 221 {target} :Modo +i activado\r\n".encode('utf-8'))
+                            else:
+                                ssl_socket.sendall(f":mock.server 443 {target} :El modo ya está activado\r\n".encode('utf-8'))
+
+                    # Modo aplicado a un canal
+                    elif target in self.channels:
+                        if len(parts) < 4:
+                            ssl_socket.sendall(f":mock.server 461 {nickname} MODE :Faltan parámetros\r\n".encode('utf-8'))
+                            continue
+
+                        # Procesar modos de canal (ejemplo: +o)
+                        channel, target_user = target, parts[3]
+                        if mode == "+o":
+                            if nickname in self.channels[channel]["operators"]:
+                                if target_user not in self.channels[channel]["operators"]:
+                                    self.channels[channel]["operators"].append(target_user)
+                                    ssl_socket.sendall(f":mock.server 324 {channel} {target_user} :Ahora es operador\r\n".encode('utf-8'))
+                                else:
+                                    ssl_socket.sendall(f":mock.server 443 {channel} {target_user} :Ya es operador\r\n".encode('utf-8'))
+                            else:
+                                ssl_socket.sendall(f":mock.server 482 {channel} :No tienes permisos para cambiar modos\r\n".encode('utf-8'))
+
+                    else:
+                        ssl_socket.sendall(f":mock.server 401 {nickname} {target} :El objetivo no existe\r\n".encode('utf-8'))
+
 
                 elif data.startswith("PART"):
                     channel = data.split()[1]
-                    if channel in self.channels and nickname in self.channels[channel]:
-                        self.channels[channel].remove(nickname)
+                    if channel in self.channels and nickname in self.channels[channel]["users"]:
+                        self.channels[channel]["users"].remove(nickname)
                         ssl_socket.sendall(f":mock.server 333 {nickname} {channel} :{nickname} ha salido del canal\r\n".encode('utf-8'))
                         print(f"[SERVER] {nickname} ha salido del canal {channel}")
 
-                    # Notificar a otros usuarios en el canal
-                        for user in self.channels[channel]:
-                            self.clients[user].sendall(f":{nickname} PART {channel}\r\n".encode('utf-8'))
+                        # Notificar a otros usuarios en el canal
+                        for user in self.channels[channel]["users"]:
+                            self.clients[user]["socket"].sendall(f":{nickname} PART {channel}\r\n".encode('utf-8'))
 
-                    # Eliminar el canal si está vacío
-                        if not self.channels[channel]:
+                        # Eliminar el canal si no quedan usuarios
+                        if not self.channels[channel]["users"]:
+                            print(f"[SERVER] Canal {channel} eliminado porque está vacío.")
                             del self.channels[channel]
+
                     else:
+                    # Responder con un error si el usuario no está en el canal
                         ssl_socket.sendall(f":mock.server 442 {nickname} {channel} :No estás en el canal\r\n".encode('utf-8'))
                     
+                
+                elif data.startswith("LIST"):
+                    # Listar canales
+                    if self.channels:
+                        for channel, details in self.channels.items():
+                            ssl_socket.sendall(f":mock.server 322 {nickname} {channel} {len(details['users'])} :Usuarios en el canal\r\n".encode('utf-8'))
+                        ssl_socket.sendall(b":mock.server 323 :Fin de la lista de canales\r\n")
+                    else:
+                        ssl_socket.sendall(b":mock.server 323 :No hay canales disponibles\r\n")
 
                 elif data.startswith("PRIVMSG"):
                     parts = data.split(' ', 2)
@@ -106,9 +168,9 @@ class MockIRCServer:
                     message = parts[2][1:] if len(parts) > 2 else "(sin mensaje)"
                     if target.startswith("#"):  # Mensaje a un canal
                         if target in self.channels:
-                            for user in self.channels[target]:
+                            for user in self.channels[target]["users"]:
                                 if user != nickname:
-                                    self.clients[user].sendall(f":{nickname} PRIVMSG {target} :{message}\r\n".encode('utf-8'))
+                                    self.clients[user]["socket"].sendall(f":{nickname} PRIVMSG {target} :{message}\r\n".encode('utf-8'))
                             print(f"[SERVER] Mensaje enviado a canal {target}: {message}")
                         else:
                             ssl_socket.sendall(f":mock.server 403 {target} :No existe el canal\r\n".encode('utf-8'))
@@ -142,11 +204,14 @@ class MockIRCServer:
                     ssl_socket.sendall(f":mock.server 221 {nickname} QUIT :{reason}\r\n".encode('utf-8'))
 
                     # Notificar a otros usuarios en los canales
-                    for channel, users in self.channels.items():
-                        if nickname in users:
-                            users.remove(nickname)
-                            for user in users:
-                                self.clients[user].sendall(f":{nickname} QUIT :{reason}\r\n".encode('utf-8'))
+                    for channel, details in self.channels.items():
+                        if nickname in details["users"]:
+                            details["users"].remove(nickname)
+                            if not details["users"]:
+                                del self.channels[channel]
+                            else:
+                                for user in details["users"]:
+                                    self.clients[user].sendall(f":{nickname} QUIT :{reason}\r\n".encode('utf-8'))
                     
                     break
 
