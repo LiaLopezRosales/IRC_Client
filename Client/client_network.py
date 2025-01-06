@@ -23,7 +23,7 @@ class ClientConnection:
         self.socket = None
         self.ssl_socket = None
 
-    def connect(self):
+    def connect_client(self):
         """
         Establece una conexión al servidor utilizando SSL.
         """
@@ -91,7 +91,27 @@ class ClientConnection:
         """
         self.send("JOIN", [channel])
 
-    def send_message(self, target, message):
+    def change_topic(self, channel, new_topic):
+        """
+        Envía un comando Topic para cambiar el tema de un canal.
+
+        Args:
+            channel (str): Nombre del canal (e.g., "#general").
+            new_topic (srt): Nuevo mensaje a colocar en el topic
+        """
+        self.send("TOPIC", [channel], new_topic)
+
+    def change_mode(self, target, mode):
+        """
+        Cambia el modo de un canal o usuario.
+
+        Args:
+            target (str): Destinatario (usuario o canal).
+            mode (srt): modo a establecer en el objetivo (ya debe de estar preestablecido por el server).
+        """
+        self.send("MODE", [target], mode)
+
+    def message(self, target, message):
         """
         Envía un mensaje privado a un usuario o canal.
         
@@ -120,7 +140,7 @@ class ClientConnection:
         self.send("QUIT", trailing=message)
         self.close()
 
-    def send_notice(self, target, message):
+    def notice(self, target, message):
         """
         Enviar un mensaje de notificación sin respuesta (RFC 2812).
         """
@@ -179,3 +199,158 @@ class ClientConnection:
 
 
 
+    def oper(self, name, password, privileges=None):
+        """
+        Otorga privilegios de operador a un usuario.
+
+        Args:
+            name (str): Nombre del usuario que se desea otorgar privilegios.
+            password (str): Contraseña para la autenticación del operador.
+            privileges (list, optional): Lista de privilegios adicionales a otorgar.
+        """
+        params = [name, password]
+        if privileges:
+            params.extend(privileges)
+        self.send("OPER", params)
+
+    def kick(self, channel, user, reason="Expulsado"): 
+        """
+        Expulsa a un usuario de un canal especificado.
+
+        Args:
+            channel (str): Canal del cual expulsar al usuario.
+            user (str): Nombre del usuario a expulsar.
+            reason (str, optional): Motivo de la expulsión. Default es "Expulsado".
+        """
+        self.send("KICK", [channel, user], reason)
+
+    def invite(self, user, channel):
+        """
+        Invita a un usuario a un canal específico.
+
+        Args:
+            user (str): Nombre del usuario a invitar.
+            channel (str): Canal al que se invita al usuario.
+        """
+        self.send("INVITE", [user, channel])
+
+    def names(self, channel):
+        """
+        Solicita la lista de usuarios presentes en un canal.
+
+        Args:
+            channel (str): Canal del cual listar los usuarios.
+        """
+        self.send("NAMES", [channel])
+
+    def list(self):
+        """
+        Solicita la lista de canales disponibles en el servidor.
+        """
+        self.send("LIST")
+
+    def who(self, mask):
+        """
+        Solicita información sobre usuarios coincidentes con un criterio.
+
+        Args:
+            mask (str): Máscara de búsqueda para filtrar usuarios.
+        """
+        self.send("WHO", [mask])
+
+    def whois(self, user):
+        """
+        Solicita información detallada sobre un usuario específico.
+
+        Args:
+            user (str): Nombre del usuario a consultar.
+        """
+        self.send("WHOIS", [user])
+
+    def whowas(self, user):
+        """
+        Solicita información sobre un usuario previamente conectado.
+
+        Args:
+            user (str): Nombre del usuario previamente conectado.
+        """
+        self.send("WHOWAS", [user])
+
+    def admin(self):
+        """
+        Solicita información del administrador del servidor.
+        """
+        self.send("ADMIN")
+
+    def info(self):
+        """
+        Solicita información general sobre el servidor.
+        """
+        self.send("INFO")
+
+    def version(self):
+        """
+        Solicita la versión del software del servidor.
+        """
+        self.send("VERSION")
+
+    def stats(self):
+        """
+        Solicita estadísticas del servidor.
+        """
+        self.send("STATS")
+
+    def links(self):
+        """
+        Solicita una lista de servidores conectados.
+        """
+        self.send("LINKS")
+
+    def time(self):
+        """
+        Solicita la hora actual del servidor.
+        """
+        self.send("TIME")
+
+    def connect_servers(self, target_server, port):
+        """
+        Solicita la conexión a otro servidor a través del servidor actual.
+
+        Args:
+            target_server (str): Nombre del servidor al que conectarse.
+            port (int): Puerto del servidor de destino.
+        """
+        self.send("CONNECT", [target_server, str(port)])
+
+    def trace(self):
+        """
+        Solicita la traza de la ruta de conexión hasta el servidor.
+        """
+        self.send("TRACE")
+
+    def away(self, message="Ausente"): 
+        """
+        Establece un mensaje de ausencia para el usuario.
+
+        Args:
+            message (str, optional): Mensaje de ausencia. Default es "Ausente".
+        """
+        self.send("AWAY", trailing=message)
+
+    def rehash(self):
+        """
+        Solicita la recarga de la configuración del servidor.
+        """
+        self.send("REHASH")
+
+    def die(self):
+        """
+        Solicita la terminación del servidor (solo operadores).
+        """
+        self.send("DIE")
+
+    def restart(self):
+        """
+        Solicita el reinicio del servidor.
+        """
+        self.send("RESTART")
