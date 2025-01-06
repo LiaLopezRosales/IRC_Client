@@ -101,15 +101,19 @@ class ClientConnection:
         """
         self.send("TOPIC", [channel], new_topic)
 
-    def change_mode(self, target, mode):
+    def change_mode(self, target, mode, params=None):
         """
         Cambia el modo de un canal o usuario.
 
         Args:
             target (str): Destinatario (usuario o canal).
-            mode (srt): modo a establecer en el objetivo (ya debe de estar preestablecido por el server).
+            mode (str): Modo a establecer.
+            params (str, optional): Parámetros adicionales para ciertos modos.
         """
-        self.send("MODE", [target], mode)
+        if params:
+            self.send("MODE", [target, mode, params])
+        else:
+            self.send("MODE", [target, mode])
 
     def message(self, target, message):
         """

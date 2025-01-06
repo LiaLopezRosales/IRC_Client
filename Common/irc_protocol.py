@@ -31,6 +31,9 @@ def parse_message(raw_message):
             raw_message, trailing = raw_message.split(' :', 1)
 
         parts = raw_message.split()
+        if not parts:
+            raise ProtocolError("Mensaje IRC inválido: Falta el comando")
+
         command = parts[0]
         params = parts[1:]
 
@@ -56,11 +59,19 @@ def build_message(command, params=None, trailing=None):
         str: Mensaje formateado listo para enviar.
     """
     try:
+        if not command:
+            raise ProtocolError("El comando no puede estar vacío")
+
         message = command
+        
+        # Verificar si hay parámetros y evitar concatenar None
         if params:
-            message += ' ' + ' '.join(params)
+            # Si los parámetros son una lista, asegurar que cada parámetro con espacios esté correctamente delimitado.
+            message += ' ' + ' '.join([str(param) if param else '' for param in params])
+
         if trailing:
             message += ' :' + trailing
+   
         return message
     except Exception as e:
         raise ProtocolError(f"Error al construir el mensaje: {e}")
