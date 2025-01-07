@@ -206,6 +206,8 @@ class IRCServer:
                     channel = data.split()[1]
                     if channel in self.channels and nickname in self.channels[channel]["users"]:
                         self.channels[channel]["users"].remove(nickname)
+                        if nickname in self.channels[channel]["operators"]:
+                            self.channels[channel]["operators"].remove(nickname)
                         ssl_socket.sendall(f":mock.server 333 {nickname} {channel} :{nickname} ha salido del canal\r\n".encode('utf-8'))
                         print(f"[SERVER] {nickname} ha salido del canal {channel}")
 
@@ -336,19 +338,53 @@ class IRCServer:
                     ssl_socket.sendall(f":mock.server 341 {nickname} {target} {channel} :Invitación enviada\r\n".encode('utf-8'))
 
                 elif data.startswith("WHO"):
+                    print(f"[SERVER] 0")
                     parts = data.split()
-                    channel = parts[1] if len(parts) > 1 else "*"
+                    channel = parts[1] if len(parts) > 1 else None  # Usar None para "todos los usuarios"
 
+                    # Si no se especifica un canal, mostrar información de todos los usuarios
+                    if channel is None:
+                        print(f"[SERVER] 1")
+                        for user, details in self.clients.items():
+                            print(f"[SERVER] 2")
+                            if "+i" not in details["modes"]:  # Excluir usuarios invisibles
+                                print(f"[SERVER] 3")
+                                ssl_socket.sendall(
+                                    f":mock.server 352 {nickname} * {user} 127.0.0.1 mock.server {user} H :0 Información adicional\r\n".encode('utf-8')
+                                )
+                        print(f"[SERVER] 4")
+                        ssl_socket.sendall(f":mock.server 315 {nickname} * :Fin de la lista WHO\r\n".encode('utf-8'))
+                        print(f"[SERVER] 5")
+                        continue
+
+                    # Si se especifica un canal, verificar su existencia
                     if channel not in self.channels:
+                        print(f"[SERVER] 6")
                         ssl_socket.sendall(f":mock.server 403 {nickname} {channel} :No existe el canal\r\n".encode('utf-8'))
                         continue
 
+                    # Mostrar información de los usuarios del canal
+                    found_users = False
                     for user in self.channels[channel]["users"]:
+                        print(f"[SERVER] 7")
+                        # Excluir usuarios invisibles que no están en el mismo canal
                         if "+i" in self.clients[user]["modes"] and nickname not in self.channels[channel]["users"]:
+                            print(f"[SERVER] 8")
                             continue
-                        ssl_socket.sendall(f":mock.server 352 {nickname} {channel} {user} :Información del usuario\r\n".encode('utf-8'))
+                        print(f"[SERVER] 9")
+                        ssl_socket.sendall(
+                            f":mock.server 352 {nickname} * {user} 127.0.0.1 mock.server {user} H :0 Información adicional\r\n".encode('utf-8')
+                        )
+                        print(f"[SERVER] 10")
+                        found_users = True
 
-                    ssl_socket.sendall(f":mock.server 315 {nickname} {channel} :Fin de la lista WHO\r\n".encode('utf-8'))
+                    # Mensaje final
+                    if found_users:
+                        print(f"[SERVER] 11")
+                        ssl_socket.sendall(f":mock.server 315 {nickname} {channel} :Fin de la lista WHO\r\n".encode('utf-8'))
+                    else:
+                        print(f"[SERVER] 12")
+                        ssl_socket.sendall(f":mock.server 315 {nickname} {channel} :No hay usuarios visibles\r\n".encode('utf-8'))
 
                 elif data.startswith("WHOIS"):
                     parts = data.split()

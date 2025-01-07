@@ -29,17 +29,21 @@ class ClientConnection:
         """
         try:
             # Crear un socket TCP/IP
-            self.socket = socket.create_connection((self.host, self.port))
+            self.ssl_socket = socket.create_connection((self.host, self.port))
 
             # Crear un contexto SSL
-            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            #context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
 
             # Aquí se carga el certificado del servidor si es necesario (no es obligatorio para el cliente)
-            context.load_verify_locations(cafile="server.crt")
+            #context.load_verify_locations(cafile="server.crt")
 
             # Envolver el socket en un contexto SSL
-            self.ssl_socket = context.wrap_socket(self.socket, server_hostname=self.host)
-
+            #self.ssl_socket = context.wrap_socket(self.socket, server_hostname=self.host)
+            # Enviar comandos de registro (PASS, NICK, USER)
+            self.pass_command("your_password")  # Cambia "your_password" según tu configuración
+            self.nick("YourNick")              # Cambia "YourNick" por tu apodo deseado
+            self.set_user("YourNick", "YourRealName")  # Cambia "YourRealName" según sea necesario
+            print("Registro completado.")
             print(f"Conexión segura establecida con {self.host}:{self.port}")
         
         except Exception as e:
@@ -66,19 +70,24 @@ class ClientConnection:
             tuple: (prefix, command, params, trailing).
         """
         try:
+            # Leer respuesta del servidor
             response = self.ssl_socket.recv(4096).decode('utf-8').strip()
             
-            if response.startswith("PING"):
-                # Extraer el servidor y responder con PONG
-                server_name = response.split()[1]
+            # Dividir en líneas si hay múltiples respuestas
+            responses = response.split('\r\n')
+            
+            for line in responses:
+                if line.startswith("PING"):
+                    # Extraer el servidor y responder con PONG
+                    server_name = line.split()[1]
+                    print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
+                    self.pong(server_name)
+                    return f"PONG enviado a {server_name}"
                 
-                print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
-                
-                self.pong(server_name)
-                return f"PONG enviado a {server_name}"
+                # Parsear y devolver la respuesta
+                parsed = parse_message(line)
+                return parsed
 
-            return parse_message(response)
-        
         except Exception as e:
             raise IRCConnectionError(f"Error al recibir mensaje: {e}")
 
@@ -358,3 +367,97 @@ class ClientConnection:
         Solicita el reinicio del servidor.
         """
         self.send("RESTART")
+
+    def pass_command(self, password):
+        """
+        Envía el comando PASS para establecer la contraseña de conexión.
+
+        Args:
+            password (str): Contraseña para la conexión.
+        """
+        self.send("PASS", [password])
+
+    def nick(self, nickname):
+        """
+        Envía el comando NICK para establecer o cambiar el apodo del cliente.
+
+        Args:
+            nickname (str): Apodo deseado para el cliente.
+        """
+        self.send("NICK", [nickname])
+
+    def service(self, nickname, reserved, distribution, type_, reserved_2, info):
+        """
+        Envía el comando SERVICE para registrar un nuevo servicio.
+
+        Args:
+            nickname (str): Nombre del servicio.
+            reserved (str): Campo reservado (actualmente no utilizado).
+            distribution (str): Distribución del servicio (alcance).
+            type_ (str): Tipo del servicio (reservado para futuro uso).
+            reserved_2 (str): Segundo campo reservado (no utilizado).
+            info (str): Información adicional del servicio.
+        """
+        self.send("SERVICE", [nickname, reserved, distribution, type_, reserved_2], info)
+
+    def squit(self, server, comment):
+        """
+        Envía el comando SQUIT para desconectar un servidor remoto (solo operadores).
+
+        Args:
+            server (str): Nombre del servidor a desconectar.
+            comment (str): Razón de la desconexión.
+        """
+        self.send("SQUIT", [server], comment)
+
+    def motd(self, target=None):
+        """
+        Envía el comando MOTD para obtener el "Message of the Day" de un servidor.
+
+        Args:
+            target (str, optional): Servidor del cual obtener el MOTD.
+        """
+        if target:
+            self.send("MOTD", [target])
+        else:
+            self.send("MOTD")
+
+    def lusers(self, mask=None, target=None):
+        """
+        Envía el comando LUSERS para obtener estadísticas del tamaño de la red IRC.
+
+        Args:
+            mask (str, optional): Máscara para filtrar servidores.
+            target (str, optional): Servidor objetivo para la consulta.
+        """
+        params = []
+        if mask:
+            params.append(mask)
+        if target:
+            params.append(target)
+        self.send("LUSERS", params)
+
+    def servlist(self, mask=None, type_=None):
+        """
+        Envía el comando SERVLIST para listar servicios disponibles.
+
+        Args:
+            mask (str, optional): Máscara para filtrar servicios.
+            type_ (str, optional): Tipo de servicio para filtrar.
+        """
+        params = []
+        if mask:
+            params.append(mask)
+        if type_:
+            params.append(type_)
+        self.send("SERVLIST", params)
+
+    def squery(self, servicename, text):
+        """
+        Envía el comando SQUERY para enviar un mensaje a un servicio.
+
+        Args:
+            servicename (str): Nombre del servicio objetivo.
+            text (str): Mensaje a enviar al servicio.
+        """
+        self.send("SQUERY", [servicename], text)

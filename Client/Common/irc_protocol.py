@@ -22,6 +22,9 @@ def parse_message(raw_message):
         tuple: (prefix, command, params, trailing).
     """
     try:
+        if not raw_message.strip():
+            raise ProtocolError("Mensaje vacío recibido")
+
         prefix = ''
         trailing = None
         if raw_message.startswith(':'):
@@ -38,7 +41,7 @@ def parse_message(raw_message):
         params = parts[1:]
 
         return prefix, command, params, trailing
-    
+
     except Exception as e:
         raise ProtocolError(f"Error al parsear el mensaje: {e}")
 
