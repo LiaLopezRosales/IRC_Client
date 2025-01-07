@@ -67,7 +67,14 @@ def run_client():
             print("35. REHASH")
             print("36. DIE")
             print("37. RESTART")
-            print("38. SALIR")
+            print("38. KILL")
+            print("39. ERROR")
+            print("40. SUMMON")
+            print("41. USERS")
+            print("42. WALLOPS")
+            print("43. USERHOST")
+            print("44. ISON")
+            print("45. Salir")
             
             option = input("Elige una opción: ")
             
@@ -190,6 +197,29 @@ def run_client():
                 elif option == "37":
                     connection.restart()
                 elif option == "38":
+                    target = input("Introduce el nombre del usuario a expulsar: ")
+                    comment = input("Introduce un comentario: ")
+                    connection.kill(target, comment)
+                elif option == "39":
+                    message = input("Introduce el mensaje de error: ")
+                    connection.error(message)
+                elif option == "40":
+                    user = input("Introduce el nombre del usuario a notificar: ")
+                    server = input("Introduce el servidor objetivo (opcional): ")
+                    connection.summon(user, server or None)
+                elif option == "41":
+                    server = input("Introduce el servidor objetivo (opcional): ")
+                    connection.users(server or None)
+                elif option == "42":
+                    message = input("Introduce el mensaje para los operadores: ")
+                    connection.wallops(message)
+                elif option == "43":
+                    nicks = input("Introduce los apodos a consultar (separados por espacio): ").split()
+                    connection.userhost(*nicks)
+                elif option == "44":
+                    nicks = input("Introduce los apodos a verificar (separados por espacio): ").split()
+                    connection.ison(*nicks)
+                elif option == "45":
                     print("Saliendo...")
                     break
                 else:

@@ -461,3 +461,74 @@ class ClientConnection:
             text (str): Mensaje a enviar al servicio.
         """
         self.send("SQUERY", [servicename], text)
+        
+    def kill(self, target, comment):
+        """
+        Expulsa a un usuario de la red IRC (requiere privilegios de operador).
+
+        Args:
+            target (str): Nombre del usuario a expulsar.
+            comment (str): Razón para expulsar al usuario.
+        """
+        self.send("KILL", [target], comment)
+
+    def error(self, message):
+        """
+        Envía un mensaje de error al cliente desde el servidor.
+
+        Args:
+            message (str): Mensaje de error a enviar.
+        """
+        self.send("ERROR", trailing=message)
+
+    def summon(self, user, target_server=None):
+        """
+        Solicita a un servidor IRC que intente notificar a un usuario conectado al sistema local.
+
+        Args:
+            user (str): Nombre del usuario que se intentará contactar.
+            target_server (str, optional): Servidor objetivo para enviar la solicitud.
+        """
+        params = [user]
+        if target_server:
+            params.append(target_server)
+        self.send("SUMMON", params)
+
+    def users(self, target_server=None):
+        """
+        Solicita la lista de usuarios conectados al servidor.
+
+        Args:
+            target_server (str, optional): Servidor del cual solicitar la lista de usuarios.
+        """
+        if target_server:
+            self.send("USERS", [target_server])
+        else:
+            self.send("USERS")
+
+    def wallops(self, message):
+        """
+        Envía un mensaje global a todos los operadores de la red.
+
+        Args:
+            message (str): Mensaje a enviar.
+        """
+        self.send("WALLOPS", trailing=message)
+
+    def userhost(self, *nicks):
+        """
+        Solicita información sobre uno o más apodos en la red.
+
+        Args:
+            nicks (str): Uno o más apodos a consultar.
+        """
+        self.send("USERHOST", list(nicks))
+
+    def ison(self, *nicks):
+        """
+        Verifica si uno o más apodos están conectados.
+
+        Args:
+            nicks (str): Uno o más apodos a verificar.
+        """
+        self.send("ISON", list(nicks))
