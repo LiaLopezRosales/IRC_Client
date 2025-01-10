@@ -265,7 +265,7 @@ class MainView(tk.Tk):
         # Demás botones del menú
         menu_buttons = [
             ("Cambiar Nick", self.change_nick_action),
-            ("Conectar Servidor", self.connect_action),
+            ("Conectar Servidor", self.connect_another_server_action),
             ("Info Servidor", self.server_info_action),
             ("Lista Servidores", self.server_list_action),
             ("Salir", self.quit)
@@ -520,8 +520,53 @@ class MainView(tk.Tk):
 
     def connect_action(self):
         """Solicitar servidor y puerto en un solo formulario."""
+        if not self.is_authenticated:
+            messagebox.showerror("Conectar","Debes autenticarte primero")
+            return
+        
         connect_window = tk.Toplevel(self)
         connect_window.title("Conectar al Servidor")
+        connect_window.geometry("300x200")
+
+        tk.Label(connect_window, text="Servidor:").pack(pady=5)
+        server_entry = tk.Entry(connect_window)
+        server_entry.pack(pady=5)
+
+        tk.Label(connect_window, text="Puerto:").pack(pady=5)
+        port_entry = tk.Entry(connect_window)
+        port_entry.pack(pady=5)
+
+        def attempt_connection():
+            server = server_entry.get()
+            port = port_entry.get()
+            if not server or not port:
+                messagebox.showerror("Error", "Debes completar ambos campos.")
+                return
+            try:
+                int(port)  # Verificar si es numérico
+                self.connection = ClientConnection(server, port)
+                self.connection.connect_client(self.password,self.nick,self.username)
+                self.is_connected = True
+                self.start_receiving()
+                self.process_server_messages()
+                self.update_connection_status(True)
+                self.update_buttons()
+                messagebox.showinfo("Conectado", f"Conectando a {server}:{port}...")
+                connect_window.destroy()
+            except ValueError:
+                messagebox.showerror("Error", "El puerto debe ser un número.")
+
+        connect_button = tk.Button(connect_window, text="Conectar", command=attempt_connection)
+        connect_button.pack(pady=10)
+
+    def connect_another_server_action(self):
+        """Solicitar servidor y puerto en un solo formulario."""
+        if not self.is_connected:
+            messagebox.showerror("Conectar","Debe estar conectado para poder enlazar otro servidor")
+            return
+        
+        connect_window = tk.Toplevel(self)
+        connect_window.title("Conectar otro Servidor")
         connect_window.geometry("300x200")
 
         tk.Label(connect_window, text="Servidor:").pack(pady=5)
@@ -569,6 +614,7 @@ class MainView(tk.Tk):
                 messagebox.showinfo("Desconectado", "Conexión cerrada.")
         else:
             messagebox.showwarning("Desconexión", "No estás conectado a ningún servidor.")
+
     def logout_action(self):
         """Cerrar sesión y reiniciar los datos."""
         if messagebox.askyesno("Cerrar sesión", "¿Seguro que quieres cerrar sesión?"):
