@@ -3,6 +3,10 @@ from tkinter import ttk, scrolledtext, messagebox, simpledialog
 import textwrap
 from client_network import ClientConnection
 from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT
+import threading
+from Common.custom_errors import ProtocolError
+import queue
+
 
 class MainView(tk.Tk):
     """
@@ -21,6 +25,7 @@ class MainView(tk.Tk):
         
         # Conexión al servidor IRC
         self.connection = None
+        self.server_messages = queue.Queue()
 
         # Variables de estado
         self.active_target = tk.StringVar(value="Ninguno seleccionado")
@@ -48,7 +53,50 @@ class MainView(tk.Tk):
         self.create_sidebar()
         self.create_channel_user_list()
         self.create_chat_area()
+     
+    def start_receiving(self):
+        print("Empezando a recibir")
+        """Inicia un hilo para escuchar respuestas del servidor."""
+        def listen():
+            print("Empezando a escuchar")
+            while self.is_connected:
+                print("Escuchando")
+                try:
+                    response = self.connection.receive()
+                    if response:
+                        self.server_messages.put(response)
+                except ProtocolError as e:
+                    print(f"Error de protocolo: {e}")
+                    self.is_connected = False
+                    self.update_connection_status(False)
+                    break
+                except Exception as e:
+                    print(f"Error al recibir mensaje: {e}")
+                    self.is_connected = False
+                    self.update_connection_status(False)
+                    break
+
+    
+        thread = threading.Thread(target=listen, daemon=True)
+        thread.start() 
         
+    def process_server_messages(self):
+        """Procesa los mensajes del servidor desde la cola."""
+        while not self.server_messages.empty():
+            try:
+                response = self.server_messages.get()
+                prefix, command, params, trailing = response
+                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
+                self.display_message(display_text)
+            except ValueError:
+                print(f"Error: Formato inesperado del mensaje: {response}")
+                self.display_message(f"Mensaje inesperado: {response}")
+            except Exception as e:
+                print(f"Error procesando mensaje: {e}")
+        
+        # Llama a este método nuevamente después de 100 ms
+        self.after(100, self.process_server_messages)
+
     def create_status_bar(self):
         """Cinta superior con estado de conexión."""
         
@@ -278,6 +326,9 @@ class MainView(tk.Tk):
                 
                 if new_user:
                     self.username_label.config(text=f"{new_user}")
+                    self.nick=new_user
+                    if self.connection:
+                        self.connection.nick(self.nick)
                     messagebox.showinfo("Usuario Actualizado", f"Nuevo nombre de usuario: {new_user}")
                     x = False
                 else:
@@ -286,53 +337,158 @@ class MainView(tk.Tk):
             messagebox.showerror("Error", "Debes autenticarte primero") 
         
     def server_info_action(self):
-        messagebox.showinfo("Información", "Versión del servidor: IRC 2.0")
+        """Solicita y muestra la versión del servidor IRC."""
+        if not self.connection:
+            messagebox.showerror("Error", "No estás conectado al servidor.")
+            return
+
+        # Crear una cola para almacenar la información del servidor
+        self.server_info_queue = queue.Queue()
+
+        def request_version():
+            """Hilo para solicitar y procesar la versión del servidor."""
+            try:
+                # Solicita la versión del servidor
+                self.connection.version()
+
+                # Recibe la respuesta del servidor
+                response = self.connection.receive()
+                if response and response[1] == "351":  # Código 351 para VERSION
+                    server_name = response[2][2]  # Nombre del servidor
+                    version_info = response[2][1]  # Versión del servidor
+                    self.server_info_queue.put((server_name, version_info))
+                else:
+                    self.server_info_queue.put(("Error", "No se pudo obtener la versión del servidor."))
+            except Exception as e:
+                self.server_info_queue.put(("Error", f"No se pudo obtener la información: {e}"))
+            finally:
+                self.server_info_queue.put(None)  # Fin de los datos
+
+        # Crear un hilo para la solicitud y el procesamiento
+        thread = threading.Thread(target=request_version, daemon=True)
+        thread.start()
+
+        # Actualizar la información en la interfaz
+        self.update_server_info()
+
+    def update_server_info(self):
+        """Procesa la información del servidor desde la cola y actualiza la interfaz."""
+        try:
+            while not self.server_info_queue.empty():
+                info = self.server_info_queue.get()
+                if info is None:  # Fin de los datos
+                    return
+
+                # Desempaqueta y muestra la información
+                server_name, version_info = info
+                if server_name == "Error":
+                    messagebox.showerror("Error", version_info)
+                else:
+                    messagebox.showinfo("Información", f"Servidor: {server_name}\nVersión: {version_info}")
+        except Exception as e:
+            print(f"Error actualizando la información del servidor: {e}")
+        finally:
+            # Vuelve a llamar a esta función después de 100 ms
+            self.after(100, self.update_server_info)
 
     def server_list_action(self):
-        
-        # esto se sustituirá con la lógica del IRC
-        simulated_servers = [
-            {"server_name": "local", "version": "v1.0"},
-            {"server_name": "matcom", "version": "v3.4.1"},
-            {"server_name": "teacher", "version": "v1.3.2"},
-            {"server_name": "privet", "version": "v6.3"}
-        ]
+        """Solicita y muestra la lista de servidores conectados al IRC."""
+        if not self.connection:
+            messagebox.showerror("Error", "No estás conectado al servidor.")
+            return
 
-        # Crear una nueva ventana para mostrar los servidores
+        # Crear una cola para almacenar los datos del servidor
+        self.server_list_queue = queue.Queue()
+
+        def request_links():
+            """Hilo para solicitar y procesar la lista de servidores."""
+            try:
+                # Solicita la lista de servidores
+                self.connection.links()
+
+                while True:
+                    response = self.connection.receive()
+                    if response and response[1] == "364":  # Código 364 para LINKS
+                        server_name = response[2][2]  # Nombre del servidor
+                        description = response[3]  # Trailing contiene la descripción
+                        self.server_list_queue.put(f"{server_name} - {description}")
+                    elif response and response[1] == "365":  # Código 365 para fin de LINKS
+                        break
+            except Exception as e:
+                self.server_list_queue.put(f"Error: {e}")
+            finally:
+                # Marca el final de los datos en la cola
+                self.server_list_queue.put(None)
+
+        # Crear un hilo para la solicitud y el procesamiento
+        thread = threading.Thread(target=request_links, daemon=True)
+        thread.start()
+
+        # Crear la ventana para mostrar los servidores
         servers_window = tk.Toplevel(self)
         servers_window.title(f"Servidores conectados")
         servers_window.geometry("400x400")
         servers_window.configure(bg=self.colors["bg"])
 
-        tk.Label(servers_window, text=f"Servidores conectados", font=("Arial", 16, "bold"), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
+        tk.Label(servers_window, text=f"Servidores conectados", font=("Arial", 16, "bold"),
+                bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
 
         # Frame para contener la lista y la barra de desplazamiento
         list_frame = tk.Frame(servers_window, bg=self.colors["bg"])
         list_frame.pack(fill="both", expand=True)
 
-        # Barra de desplazamiento
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
 
-        # Listbox para mostrar servidores y versiones
-        user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
-        user_listbox.pack(side="left", fill="both", expand=True)
+        self.server_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+                                        bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
+        self.server_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.server_listbox.yview)
 
-        # Agregar los datos simulados al listbox
-        for user in simulated_servers:
-            user_listbox.insert(tk.END, f"{user['server_name']} - {user['version']}")
+        # Actualizar la lista de servidores periódicamente
+        self.update_server_list()
 
-        scrollbar.config(command=user_listbox.yview)
+    def update_server_list(self):
+        """Actualiza la lista de servidores desde la cola."""
+        try:
+            while not self.server_list_queue.empty():
+                server = self.server_list_queue.get()
+                if server is None:  # Fin de los datos
+                    return
+                self.server_listbox.insert(tk.END, server)
+        except Exception as e:
+            print(f"Error actualizando lista de servidores: {e}")
+        finally:
+            # Vuelve a llamar a esta función después de 100 ms
+            self.after(100, self.update_server_list)
+
 
     def send_message(self):
         """Envía un mensaje, muestra en el historial y limpia la entrada."""
-        target = self.active_target
+        target = self.active_target.get()
         message = self.message_entry.get()
-        if message.strip():  # Evitar mensajes vacíos
-            self.display_message(f"Tú: {message}", sender="self")
-            self.message_entry.delete(0, tk.END)  # Limpieza automática
-        else:
+        if not self.connection:
+            messagebox.showerror("Error", "No estás conectado al servidor.")
+            return
+
+        if not message.strip():
             messagebox.showwarning("Mensaje vacío", "No puedes enviar un mensaje vacío.")
+            return
+
+        try:
+            if "Canal:" in target:
+                channel = target.split("Canal: ")[1]
+                self.connection.message(channel, message)
+            elif "Usuario:" in target:
+                user = target.split("Usuario: ")[1]
+                self.connection.message(user, message)
+            else:
+                messagebox.showwarning("Sin destino", "Selecciona un canal o usuario.")
+                return
+            self.display_message(f"Tú: {message}", sender="self")
+            self.message_entry.delete(0, tk.END)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def display_message(self, message, sender="self"):
         """Muestra mensajes con formato mejorado: izquierda y multilínea."""
@@ -387,6 +543,8 @@ class MainView(tk.Tk):
                 self.connection = ClientConnection(server, port)
                 self.connection.connect_client(self.password,self.nick,self.username)
                 self.is_connected = True
+                self.start_receiving()
+                self.process_server_messages()
                 self.update_connection_status(True)
                 self.update_buttons()
                 messagebox.showinfo("Conectado", f"Conectando a {server}:{port}...")
@@ -399,14 +557,18 @@ class MainView(tk.Tk):
 
     def disconnect_action(self):
         """Desconectarse y actualizar el estado."""
-        if self.is_connected:
-            self.is_connected = False
-            self.update_connection_status(False)
-            self.update_buttons()
-            messagebox.showinfo("Desconectado", "Te has desconectado del servidor.")
+        if self.connection:
+            try:
+                self.connection.quit("Desconexión")
+            except Exception as e:
+                print(f"Error al desconectar: {e}")
+            finally:
+                self.connection = None
+                self.is_connected = False
+                self.update_connection_status(False)
+                messagebox.showinfo("Desconectado", "Conexión cerrada.")
         else:
             messagebox.showwarning("Desconexión", "No estás conectado a ningún servidor.")
-
     def logout_action(self):
         """Cerrar sesión y reiniciar los datos."""
         if messagebox.askyesno("Cerrar sesión", "¿Seguro que quieres cerrar sesión?"):
@@ -441,6 +603,9 @@ class MainView(tk.Tk):
             password = password_entry.get()
             if username and password:
                 self.username_label.config(text=f"{username}")
+                self.username=username
+                self.nick=username
+                self.password=password
                 self.is_authenticated = True
                 self.update_buttons()  # Llamada a actualización de botones
                 messagebox.showinfo("Autenticación", f"Bienvenido, {username}")

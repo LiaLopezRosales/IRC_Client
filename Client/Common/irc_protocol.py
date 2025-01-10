@@ -21,27 +21,29 @@ def parse_message(raw_message):
     Returns:
         tuple: (prefix, command, params, trailing).
     """
-    try:
-        if not raw_message.strip():
-            raise ProtocolError("Mensaje vacío recibido")
+    print(f"Mensaje recibido crudo: {raw_message}")
 
+    try:
         prefix = ''
         trailing = None
+
+        # Verifica si el mensaje tiene un prefijo
         if raw_message.startswith(':'):
             prefix, raw_message = raw_message[1:].split(' ', 1)
 
+        # Verifica si hay una sección trailing (mensaje después de ':')
         if ' :' in raw_message:
             raw_message, trailing = raw_message.split(' :', 1)
 
+        # Divide el resto del mensaje en comando y parámetros
         parts = raw_message.split()
         if not parts:
-            raise ProtocolError("Mensaje IRC inválido: Falta el comando")
+            raise ProtocolError("Mensaje IRC inválido: falta el comando")
 
-        command = parts[0]
-        params = parts[1:]
+        command = parts[0]  # El primer elemento es el comando
+        params = parts[1:]  # El resto son los parámetros
 
         return prefix, command, params, trailing
-
     except Exception as e:
         raise ProtocolError(f"Error al parsear el mensaje: {e}")
 

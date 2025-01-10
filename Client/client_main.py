@@ -18,7 +18,7 @@ def listen_for_messages(connection):
 def run_client():
     try:
         connection = ClientConnection(DEFAULT_HOST, DEFAULT_PORT)
-        connection.connect_client()  # Inicia la conexión
+        connection.connect_client("pass","lia","Lia")  # Inicia la conexión
         #start_gui(connection)  # Lanza la interfaz gráfica
         
         print("Conexión establecida con el servidor IRC.")

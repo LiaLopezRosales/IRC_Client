@@ -23,7 +23,7 @@ class ClientConnection:
         self.socket = None
         self.ssl_socket = None
 
-    def connect_client(self):
+    def connect_client(self,password,nick,real_name):
         """
         Establece una conexión al servidor utilizando SSL.
         """
@@ -40,9 +40,9 @@ class ClientConnection:
             # Envolver el socket en un contexto SSL
             #self.ssl_socket = context.wrap_socket(self.socket, server_hostname=self.host)
             # Enviar comandos de registro (PASS, NICK, USER)
-            self.pass_command("your_password")  # Cambia "your_password" según tu configuración
-            self.nick("YourNick")              # Cambia "YourNick" por tu apodo deseado
-            self.set_user("YourNick", "YourRealName")  # Cambia "YourRealName" según sea necesario
+            self.pass_command(password)  # Cambia "your_password" según tu configuración
+            self.nick(nick)              # Cambia "YourNick" por tu apodo deseado
+            self.set_user(nick, real_name)  # Cambia "YourRealName" según sea necesario
             print("Registro completado.")
             print(f"Conexión segura establecida con {self.host}:{self.port}")
         
