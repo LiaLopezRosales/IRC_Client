@@ -111,6 +111,15 @@ class MainView(tk.Tk):
         )
         self.status_bar.pack(fill="x")
 
+    def update_connection_status(self, connected=True):
+        """Actualiza el estado de conexión."""
+        if connected:
+            self.connected.set("Conectado")
+            self.status_bar.config(bg=self.colors["connect"])
+        else:
+            self.connected.set("Desconectado")
+            self.status_bar.config(bg=self.colors["disconnect"])
+
     def create_channel_user_list(self):
         """Sección izquierda para lista de canales o usuarios deslizante."""
         self.channel_user_frame = tk.Frame(self, bg=self.colors["bg"], width=320)
@@ -180,7 +189,7 @@ class MainView(tk.Tk):
         self.chat_frame.pack(side="right", fill="both", expand=True)
         self.chat_frame.pack_propagate(False)  # Desactiva el ajuste automático
 
-        self.create_status_chat_bar()
+        self.create_info_chat_bar()
 
         # Historial de mensajes
         self.chat_history = scrolledtext.ScrolledText(
@@ -215,6 +224,34 @@ class MainView(tk.Tk):
             command=self.send_message
         )
         self.send_button.pack(side="right", padx=5, pady=5)
+
+    def display_message(self, message, sender="self"):
+        """Muestra mensajes con formato mejorado: izquierda y multilínea."""
+        self.chat_history.config(state="normal")
+
+        # Definir un límite de ancho 
+        message_width = int(self.chat_history.winfo_width() * 0.80)
+
+        # Aplicar formato con salto de línea si es necesario
+        wrapped_message = self.wrap_text(message, message_width)
+
+        # Formato visual: Izquierda para todos los mensajes
+        if sender == "self":
+            formatted_message = f"{wrapped_message}\n"
+        else:
+            formatted_message = f"{sender}: {wrapped_message}\n"
+
+        # Mostrar el mensaje con fuente más grande
+        self.chat_history.insert("end", formatted_message, ("message_tag",))
+        self.chat_history.config(state="disabled")
+        self.chat_history.yview("end")
+
+        # Aplicar estilo al texto (aumentar fuente y espaciado)
+        self.chat_history.tag_configure("message_tag", font=("Arial", 16), lmargin1=10, lmargin2=10, spacing1=5)
+
+    def wrap_text(self, text, max_width):
+        """Divide el texto en múltiples líneas si supera el ancho máximo."""
+        return '\n'.join(textwrap.wrap(text, width=50))
 
     def create_sidebar(self):
         """Menú lateral con botón inferior y área superior para el nombre de usuario."""
@@ -264,6 +301,7 @@ class MainView(tk.Tk):
 
         # Demás botones del menú
         menu_buttons = [
+            ("Ingresar otro cmd", self.other_cmd),
             ("Cambiar Nick", self.change_nick_action),
             ("Conectar Servidor", self.connect_another_server_action),
             ("Info Servidor", self.server_info_action),
@@ -288,7 +326,7 @@ class MainView(tk.Tk):
         # Asegurar actualización de estado
         self.update_buttons()
 
-    def create_status_chat_bar(self):
+    def create_info_chat_bar(self):
         """Cinta superior que muestra el canal o usuario activo."""
         self.status_chat_bar = tk.Frame(self.chat_frame, bg=self.colors["fg"])
         self.status_chat_bar.pack(fill="x")
@@ -308,15 +346,38 @@ class MainView(tk.Tk):
         )
         self.options_button.pack(side="right", padx=10)
 
+    def open_context_menu(self):
+        """Despliega un menú con opciones para canales o usuarios."""
+        target = self.active_target.get()
+        if target == "Ninguno seleccionado":
+            messagebox.showerror("Error", "Debes seleccionar un canal o usuario primero.")
+            return
 
-    def update_connection_status(self, connected=True):
-        """Actualiza el estado de conexión."""
-        if connected:
-            self.connected.set("Conectado")
-            self.status_bar.config(bg=self.colors["connect"])
+        # Menú emergente
+        context_menu = tk.Toplevel(self)
+        context_menu.title(f"Opciones para {target}")
+        context_menu.geometry("300x300")
+
+        tk.Label(context_menu, text=f"Opciones para {target}").pack(pady=10)
+
+        if self.active_target_type == 0:
+            self.channel_topic = tk.Label(
+                context_menu, 
+                text=self.get_topic, 
+                font=("Arial", 14, "bold")
+            )
+            self.channel_topic.pack(pady=5)
+            tk.Button(context_menu, text="Cambiar Tema", font=("Arial", 13), command=self.change_topic).pack(pady=5)
+            tk.Button(context_menu, text="Expulsar Usuario", font=("Arial", 13), command=self.kick_user).pack(pady=5)
+            tk.Button(context_menu, text="Invitar al Canal", font=("Arial", 13), command=self.invite_to_channel).pack(pady=5)
+            tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
+            tk.Button(context_menu, text="Mostrar Usuarios", font=("Arial", 13), command=self.check_users).pack(pady=5)
+            tk.Button(context_menu, text="Dejar Canal", font=("Arial",13), command=self.live_channel).pack(pady=5)
         else:
-            self.connected.set("Desconectado")
-            self.status_bar.config(bg=self.colors["disconnect"])
+            tk.Label(context_menu, text=self.get_user_info, font=("Arial", 14, "bold")).pack(pady=5)
+            tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
+            tk.Button(context_menu, text="Invita a un Canal", font=("Arial", 13), command=self.invite_user).pack(pady=5)
+
 
     def change_nick_action(self):
         if self.is_authenticated:
@@ -489,34 +550,6 @@ class MainView(tk.Tk):
             self.message_entry.delete(0, tk.END)
         except Exception as e:
             messagebox.showerror("Error", str(e))
-
-    def display_message(self, message, sender="self"):
-        """Muestra mensajes con formato mejorado: izquierda y multilínea."""
-        self.chat_history.config(state="normal")
-
-        # Definir un límite de ancho 
-        message_width = int(self.chat_history.winfo_width() * 0.80)
-
-        # Aplicar formato con salto de línea si es necesario
-        wrapped_message = self.wrap_text(message, message_width)
-
-        # Formato visual: Izquierda para todos los mensajes
-        if sender == "self":
-            formatted_message = f"{wrapped_message}\n"
-        else:
-            formatted_message = f"{sender}: {wrapped_message}\n"
-
-        # Mostrar el mensaje con fuente más grande
-        self.chat_history.insert("end", formatted_message, ("message_tag",))
-        self.chat_history.config(state="disabled")
-        self.chat_history.yview("end")
-
-        # Aplicar estilo al texto (aumentar fuente y espaciado)
-        self.chat_history.tag_configure("message_tag", font=("Arial", 16), lmargin1=10, lmargin2=10, spacing1=5)
-
-    def wrap_text(self, text, max_width):
-        """Divide el texto en múltiples líneas si supera el ancho máximo."""
-        return '\n'.join(textwrap.wrap(text, width=50))
 
     def connect_action(self):
         """Solicitar servidor y puerto en un solo formulario."""
@@ -692,62 +725,71 @@ class MainView(tk.Tk):
                 self.active_target.set(f"Usuario: {selected_user}")
                 self.active_target_type = 1
 
-    def open_context_menu(self):
-        """Despliega un menú con opciones para canales o usuarios."""
-        target = self.active_target.get()
-        if target == "Ninguno seleccionado":
-            messagebox.showerror("Error", "Debes seleccionar un canal o usuario primero.")
-            return
-
-        # Menú emergente
-        context_menu = tk.Toplevel(self)
-        context_menu.title(f"Opciones para {target}")
-        context_menu.geometry("300x300")
-
-        tk.Label(context_menu, text=f"Opciones para {target}").pack(pady=10)
-
-        if self.active_target_type == 0:
-            self.channel_topic = tk.Label(
-                context_menu, 
-                text=self.get_topic, 
-                font=("Arial", 14, "bold")
-            )
-            self.channel_topic.pack(pady=5)
-            tk.Button(context_menu, text="Cambiar Tema", font=("Arial", 13), command=self.change_topic).pack(pady=5)
-            tk.Button(context_menu, text="Expulsar Usuario", font=("Arial", 13), command=self.kick_user).pack(pady=5)
-            tk.Button(context_menu, text="Invitar al Canal", font=("Arial", 13), command=self.invite_to_channel).pack(pady=5)
-            tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
-            tk.Button(context_menu, text="Mostrar Usuarios", font=("Arial", 13), command=self.check_users).pack(pady=5)
-        else:
-            tk.Label(context_menu, text=self.get_user_info, font=("Arial", 14, "bold")).pack(pady=5)
-            tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
-            tk.Button(context_menu, text="Invita a un Canal", font=("Arial", 13), command=self.invite_user).pack(pady=5)
-
     def change_mode(self):
         target = self.active_target.get()
         mode = simpledialog.askstring("Establecer modo", "Ingresa el modo a establecer:")
 
+        if "Canal:" in target:
+            channel = target.split("Canal: ")[1]
+            self.connection.change_mode(channel, mode)
+        elif "Usuario:" in target:
+            user = target.split("Usuario: ")[1]
+            self.connection.change_mode(user, mode)
+
     def change_topic(self):
         target = self.active_target.get()
         topic = simpledialog.askstring("Cambiar tema", "Ingresa el nuevo tema:")
+
+        channel = target.split("Canal: ")[1]
+        self.connection.change_topic(channel, topic)
+
         self.channel_topic.config(text=f"{topic}")
 
     def invite_to_channel(self):
-        channel = self.active_target.get()
+        channel = self.active_target.get().split("Canal: ")[1]
         target = simpledialog.askstring("Extender invitación", "Ingresa el nombre del usuario:")
+
+        user = target.split("Usuario: ")[1]
+        self.connection.invite(user, channel)
+
         messagebox.showinfo("Notificación", f"Invitación enviada a {target}")
 
     def invite_user(self):
-        target = self.active_target.get()
+        user = self.active_target.get()
         channel = simpledialog.askstring("Extender invitación", "Ingresa el nombre del canal:")
-        messagebox.showinfo("Notificación", f"Invitación enviada a {target}")
+        
+        channel = channel.split("Canal: ")[1]
+        self.connection.invite(user, channel)
+
+        messagebox.showinfo("Notificación", f"Invitación enviada a {user}")
 
     def kick_user(self):
-        target = self.active_target.get()
-        kicked_user = simpledialog.askstring("Usuario a banear", "Ingresa el nombre del usuario:")
+        channel = self.active_target.get().split("Canal: ")[1]
+        
+        kick_window = tk.Toplevel(self)
+        kick_window.title("Banear usuario")
+        kick_window.geometry("300x200")
+
+        # Entradas de datos
+        tk.Label(kick_window, text="Nombre del usuario:").pack(pady=5)
+        username_entry = tk.Entry(kick_window)
+        username_entry.pack(pady=5)
+
+        tk.Label(kick_window, text="Razón:").pack(pady=5)
+        reason_entry = tk.Entry(kick_window, show="*")
+        reason_entry.pack(pady=5)
+
+        def call_command():
+            user = username_entry.get().split("Usuario: ")[1]
+            reason = reason_entry.get()
+            
+            self.connection.kick(channel, user, reason)
+
+        submit_button = tk.Button(kick_window, text="Guardar", command=call_command)
+        submit_button.pack(pady=10)
 
     def check_users(self):
-        """Muestra una lista deslizante con los usuarios y permisos de un canal."""
+        """Muestra una lista deslizante con los usuarios y permisos de un canal. Comando names"""
         channel = self.active_target.get()
 
         # Simulación de datos recibidos tras un comando WHOIS
@@ -790,8 +832,39 @@ class MainView(tk.Tk):
         return "En espera"
 
     def get_user_info(self):
+        """Se obtiene toda la información del usuario con el que se está hablando. Comando whois"""
         user = self.active_target
         return " "
+
+    def other_cmd(self):
+
+        command_window = tk.Toplevel(self)
+        command_window.title("Comandos")
+        command_window.geometry("500x200")
+
+        # Entradas de datos
+        tk.Label(command_window, text="Ingrese una línea de comandos:").pack(pady=5)
+        command_entry = tk.Entry(command_window)
+        command_entry.pack(pady=5)
+
+        def process():
+            command = command_entry.get()
+
+        def show_cmd_list():
+            print("commands list")
+
+        submit_button = tk.Button(command_window, text="Guardar", command=process)
+        submit_button.pack(pady=10)
+
+        submit_button = tk.Button(command_window, text="Comandos ejecutables", command=show_cmd_list)
+        submit_button.pack(pady=10)
+
+    def live_channel(self):
+        channel = self.active_target.split("Canal: ")[1]
+        self.connection.part_channel(channel)
+        self.active_target = tk.StringVar(value="Ninguno seleccionado")
+        
+
 
 # Prueba independiente de la vista principal
 if __name__ == "__main__":
