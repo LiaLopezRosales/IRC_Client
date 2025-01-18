@@ -5,6 +5,7 @@ import ssl
 import time
 from Common.irc_protocol import build_message, parse_message
 from Common.custom_errors import IRCConnectionError
+from Common.custom_errors import ProtocolError
 
 class ClientConnection:
     """
@@ -55,6 +56,7 @@ class ClientConnection:
         """
         try:
             message = build_message(command, params, trailing)
+            print(f"Enviando mensaje: {message}")
             self.ssl_socket.sendall(message.encode('utf-8') + b'\r\n')
         
         except Exception as e:
@@ -62,32 +64,38 @@ class ClientConnection:
 
     def receive(self):
         """
-        Recibe y parsea un mensaje del servidor.
+        Recibe y procesa mensajes del servidor.
         Responde automáticamente a PING.
         Procesa respuestas PONG cuando se envían PINGs.
 
-        Returns:
-            tuple: (prefix, command, params, trailing).
+        Yields:
+            tuple: (prefix, command, params, trailing) para cada línea procesada.
         """
         try:
-            # Leer respuesta del servidor
-            response = self.ssl_socket.recv(4096).decode('utf-8').strip()
-            
-            # Dividir en líneas si hay múltiples respuestas
-            responses = response.split('\r\n')
-            
+            # Leer datos del servidor
+            data = self.ssl_socket.recv(4096).decode('utf-8').strip()
+            if not data:
+                return None
+
+            # Dividir los mensajes en líneas por el delimitador IRC (\r\n)
+            responses = data.split('\r\n')
+
+            # Procesar cada línea
             for line in responses:
+
                 if line.startswith("PING"):
-                    # Extraer el servidor y responder con PONG
+                    # Responder automáticamente a PING con PONG
                     server_name = line.split()[1]
                     print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
                     self.pong(server_name)
-                    return f"PONG enviado a {server_name}"
-                
-                # Parsear y devolver la respuesta
-                parsed = parse_message(line)
-                return parsed
-
+                    yield f"PONG enviado a {server_name}"
+                else:
+                    # Parsear el mensaje y devolverlo
+                    try:
+                        parsed = parse_message(line)
+                        yield parsed  # Devuelve el mensaje parseado
+                    except ProtocolError as e:
+                        print(f"Error al parsear el mensaje: {e}")
         except Exception as e:
             raise IRCConnectionError(f"Error al recibir mensaje: {e}")
 

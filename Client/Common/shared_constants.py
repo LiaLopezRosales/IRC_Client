@@ -42,5 +42,12 @@ IRC_COMMANDS = {
     "AWAY": "Establecer mensaje de ausencia",
     "REHASH": "Recargar configuración del servidor",
     "DIE": "Cerrar el servidor (operadores)",
-    "RESTART": "Reiniciar el servidor"
+    "RESTART": "Reiniciar el servidor",
+    "ERROR":"Mandar mensaje de error(normalmente en conexiones server-server)",
+    "KILL": "Cerrar la conexión de un cliente(operadores)",
+    "SUMMON":"Solicita a un servidor IRC que intente notificar a un usuario conectado al sistema local",
+    "USERS":"Solicita la lista de usuarios conectados al servidor",
+    "WALLOPS":"Envía un mensaje global a todos los operadores de la red.",
+    "USERHOST":"Solicita información sobre uno o más apodos en la red.",
+    "ISON":"Verifica si uno o más apodos están conectados"
 }

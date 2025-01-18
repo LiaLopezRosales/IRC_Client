@@ -58,18 +58,24 @@ class MainView(tk.Tk):
         print("Empezando a recibir")
         """Inicia un hilo para escuchar respuestas del servidor."""
         def listen():
-            print("Empezando a escuchar")
+            """
+            Hilo que escucha mensajes del servidor y los procesa.
+            """
             while self.is_connected:
-                print("Escuchando")
                 try:
-                    response = self.connection.receive()
-                    if response:
-                        self.server_messages.put(response)
+                    for response in self.connection.receive():
+                        if response:
+                            # Manejo de mensajes parseados
+                            if isinstance(response, str):
+                                # Mensajes como PONG enviado
+                                self.display_message(response)
+                            else:
+                                # Mensajes parseados normales
+                                prefix, command, params, trailing = response
+                                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
+                                self.display_message(display_text)
                 except ProtocolError as e:
                     print(f"Error de protocolo: {e}")
-                    self.is_connected = False
-                    self.update_connection_status(False)
-                    break
                 except Exception as e:
                     print(f"Error al recibir mensaje: {e}")
                     self.is_connected = False
@@ -180,7 +186,7 @@ class MainView(tk.Tk):
         for channel in ["#general", "#python", "#random"]:
             self.channel_list.insert("end", channel)
 
-        for user in ["Alice", "Bob", "Charlie"]:
+        for user in ["lia", "Bob", "Charlie"]:
             self.user_list.insert("end", user)
 
     def create_chat_area(self):
@@ -386,14 +392,23 @@ class MainView(tk.Tk):
                 new_user = simpledialog.askstring("Cambiar Usuario", "Ingresa tu nuevo nombre de usuario:")
                 
                 if new_user:
-                    self.username_label.config(text=f"{new_user}")
-                    self.nick=new_user
-                    if self.connection:
-                        self.connection.nick(self.nick)
-                    messagebox.showinfo("Usuario Actualizado", f"Nuevo nombre de usuario: {new_user}")
+                    def update_nick():
+                        try:
+                            # Actualiza el nombre de usuario en la GUI y envía el comando al servidor
+                            self.username_label.config(text=f"{new_user}")
+                            self.nick = new_user
+                            if self.connection:
+                                self.connection.nick(self.nick)
+                            messagebox.showinfo("Usuario Actualizado", f"Nuevo nombre de usuario: {new_user}")
+                        except Exception as e:
+                            messagebox.showerror("Error", f"No se pudo cambiar el apodo: {e}")
+
+                    # Ejecuta la actualización en un hilo separado
+                    thread = threading.Thread(target=update_nick, daemon=True)
+                    thread.start()
                     x = False
                 else:
-                    messagebox.showerror("Error", "Debes completar el campos")
+                    messagebox.showerror("Error", "Debes completar el campo")
         else:
             messagebox.showerror("Error", "Debes autenticarte primero") 
         
@@ -412,13 +427,16 @@ class MainView(tk.Tk):
                 # Solicita la versión del servidor
                 self.connection.version()
 
-                # Recibe la respuesta del servidor
-                response = self.connection.receive()
-                if response and response[1] == "351":  # Código 351 para VERSION
-                    server_name = response[2][2]  # Nombre del servidor
-                    version_info = response[2][1]  # Versión del servidor
-                    self.server_info_queue.put((server_name, version_info))
-                else:
+                # Procesa todas las líneas de respuesta
+                version_found = False
+                for response in self.connection.receive():
+                    if isinstance(response, tuple) and response[1] == "351":  # Código 351 para VERSION
+                        server_name = response[2][2]  # Nombre del servidor
+                        version_info = response[2][1]  # Versión del servidor
+                        self.server_info_queue.put((server_name, version_info))
+                        version_found = True
+                        break  # Una vez encontrada la versión, no seguimos procesando
+                if not version_found:
                     self.server_info_queue.put(("Error", "No se pudo obtener la versión del servidor."))
             except Exception as e:
                 self.server_info_queue.put(("Error", f"No se pudo obtener la información: {e}"))
@@ -452,6 +470,7 @@ class MainView(tk.Tk):
             # Vuelve a llamar a esta función después de 100 ms
             self.after(100, self.update_server_info)
 
+
     def server_list_action(self):
         """Solicita y muestra la lista de servidores conectados al IRC."""
         if not self.connection:
@@ -468,13 +487,13 @@ class MainView(tk.Tk):
                 self.connection.links()
 
                 while True:
-                    response = self.connection.receive()
-                    if response and response[1] == "364":  # Código 364 para LINKS
-                        server_name = response[2][2]  # Nombre del servidor
-                        description = response[3]  # Trailing contiene la descripción
-                        self.server_list_queue.put(f"{server_name} - {description}")
-                    elif response and response[1] == "365":  # Código 365 para fin de LINKS
-                        break
+                    for response in self.connection.receive():
+                        if isinstance(response, tuple) and response[1] == "364":  # Código 364 para LINKS
+                            server_name = response[2][0]  # Nombre del servidor
+                            description = response[3]  # Trailing contiene la descripción
+                            self.server_list_queue.put(f"{server_name} - {description}")
+                        elif isinstance(response, tuple) and response[1] == "365":  # Fin de la lista de LINKS
+                            break
             except Exception as e:
                 self.server_list_queue.put(f"Error: {e}")
             finally:
@@ -525,9 +544,10 @@ class MainView(tk.Tk):
 
 
     def send_message(self):
-        """Envía un mensaje, muestra en el historial y limpia la entrada."""
-        target = self.active_target.get()
-        message = self.message_entry.get()
+        """Envía un mensaje al canal o usuario seleccionado."""
+        target = self.active_target.get()  # El objetivo puede ser un canal o un usuario
+        message = self.message_entry.get()  # Mensaje a enviar
+
         if not self.connection:
             messagebox.showerror("Error", "No estás conectado al servidor.")
             return
@@ -536,20 +556,28 @@ class MainView(tk.Tk):
             messagebox.showwarning("Mensaje vacío", "No puedes enviar un mensaje vacío.")
             return
 
-        try:
-            if "Canal:" in target:
-                channel = target.split("Canal: ")[1]
-                self.connection.message(channel, message)
-            elif "Usuario:" in target:
-                user = target.split("Usuario: ")[1]
-                self.connection.message(user, message)
-            else:
-                messagebox.showwarning("Sin destino", "Selecciona un canal o usuario.")
-                return
-            self.display_message(f"Tú: {message}", sender="self")
-            self.message_entry.delete(0, tk.END)
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+        def send():
+            try:
+                if "Canal:" in target:
+                    channel = target.split("Canal: ")[1]
+                    self.connection.message(channel, message)  # Enviar al canal
+                elif "Usuario:" in target:
+                    user = target.split("Usuario: ")[1]
+                    self.connection.message(user, message)  # Enviar al usuario
+                else:
+                    messagebox.showwarning("Sin destino", "Selecciona un canal o usuario.")
+                    return
+
+                # Actualizar la interfaz con el mensaje enviado
+                self.display_message(f"Tú: {message}", sender="self")
+                self.message_entry.delete(0, tk.END)
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo enviar el mensaje: {e}")
+
+        # Ejecuta la lógica de envío en un hilo separado
+        thread = threading.Thread(target=send, daemon=True)
+        thread.start()
+
 
     def connect_action(self):
         """Solicitar servidor y puerto en un solo formulario."""
@@ -593,11 +621,12 @@ class MainView(tk.Tk):
         connect_button.pack(pady=10)
 
     def connect_another_server_action(self):
-        """Solicitar servidor y puerto en un solo formulario."""
+        """Solicitar servidor y puerto para enlazar otro servidor mediante el comando CONNECT."""
         if not self.is_connected:
-            messagebox.showerror("Conectar","Debe estar conectado para poder enlazar otro servidor")
+            messagebox.showerror("Conectar", "Debe estar conectado para poder enlazar otro servidor.")
             return
-        
+
+        # Crear la ventana para ingresar el servidor y el puerto
         connect_window = tk.Toplevel(self)
         connect_window.title("Conectar otro Servidor")
         connect_window.geometry("300x200")
@@ -611,24 +640,34 @@ class MainView(tk.Tk):
         port_entry.pack(pady=5)
 
         def attempt_connection():
-            server = server_entry.get()
-            port = port_entry.get()
+            """Procesa los datos ingresados y envía el comando CONNECT."""
+            server = server_entry.get().strip()
+            port = port_entry.get().strip()
+
             if not server or not port:
                 messagebox.showerror("Error", "Debes completar ambos campos.")
                 return
+
             try:
-                int(port)  # Verificar si es numérico
-                self.connection = ClientConnection(server, port)
-                self.connection.connect_client(self.password,self.nick,self.username)
-                self.is_connected = True
-                self.start_receiving()
-                self.process_server_messages()
-                self.update_connection_status(True)
-                self.update_buttons()
-                messagebox.showinfo("Conectado", f"Conectando a {server}:{port}...")
-                connect_window.destroy()
+                # Verificar que el puerto sea un número válido
+                port = int(port)
             except ValueError:
                 messagebox.showerror("Error", "El puerto debe ser un número.")
+                return
+
+            def execute_connect():
+                """Ejecuta el comando CONNECT en un hilo separado."""
+                try:
+                    # Enviar el comando CONNECT al servidor
+                    self.connection.send("CONNECT", [server, str(port)])
+                    messagebox.showinfo("Éxito", f"Solicitud enviada para conectar a {server}:{port}.")
+                    connect_window.destroy()
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo conectar a {server}:{port}: {e}")
+
+            # Ejecutar el comando en un hilo separado
+            thread = threading.Thread(target=execute_connect, daemon=True)
+            thread.start()
 
         connect_button = tk.Button(connect_window, text="Conectar", command=attempt_connection)
         connect_button.pack(pady=10)
@@ -726,48 +765,153 @@ class MainView(tk.Tk):
                 self.active_target_type = 1
 
     def change_mode(self):
-        target = self.active_target.get()
-        mode = simpledialog.askstring("Establecer modo", "Ingresa el modo a establecer:")
+        """Solicita el modo a establecer y lo aplica a un canal, un usuario o un usuario dentro de un canal."""
+        try:
+            # Determinar si el objetivo es un canal, un usuario o ambos
+            target = self.active_target.get()
+            if "Canal:" in target:
+                target_type = "canal"
+                target_name = target.split("Canal: ")[1]
+            elif "Usuario:" in target:
+                target_type = "usuario"
+                target_name = target.split("Usuario: ")[1]
+            else:
+                messagebox.showerror("Error", "Debes seleccionar un canal o un usuario.")
+                return
+        except IndexError:
+            messagebox.showerror("Error", "El formato del objetivo no es válido.")
+            return
 
-        if "Canal:" in target:
-            channel = target.split("Canal: ")[1]
-            self.connection.change_mode(channel, mode)
-        elif "Usuario:" in target:
-            user = target.split("Usuario: ")[1]
-            self.connection.change_mode(user, mode)
+        # Solicitar el modo a establecer
+        if target_type == "canal":
+            mode = simpledialog.askstring("Establecer modo", f"Ingrese el modo a establecer para el canal {target_name}:")
+            if not mode:
+                return  # Si el usuario cancela el diálogo
+            user = None  # No aplica usuario si es solo para el canal
+        elif target_type == "usuario":
+            # Solicitar el canal y el modo si el objetivo es un usuario
+            channel = simpledialog.askstring("Establecer modo", "Ingresa el canal donde aplicar el modo:")
+            if not channel:
+                return  # Si el usuario cancela el diálogo
+            mode = simpledialog.askstring("Establecer modo", f"Ingrese el modo a establecer para el usuario {target_name} en el canal {channel}:")
+            if not mode:
+                return  # Si el usuario cancela el diálogo
+            user = target_name
+            target_name = channel  # El canal se convierte en el target principal
+
+        def execute_change_mode():
+            """Ejecuta el comando MODE en un hilo separado."""
+            try:
+                if user:
+                    # Modo aplicado a un usuario dentro de un canal
+                    self.connection.change_mode(target_name, mode + " " + user)
+                else:
+                    # Modo aplicado al canal
+                    self.connection.change_mode(target_name, mode)
+
+                target_description = f"{user} en {target_name}" if user else target_name
+                messagebox.showinfo("Éxito", f"Modo '{mode}' establecido para {target_description}.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo establecer el modo: {e}")
+
+        # Crear un hilo para ejecutar el comando
+        thread = threading.Thread(target=execute_change_mode, daemon=True)
+        thread.start()
+
+
 
     def change_topic(self):
-        target = self.active_target.get()
+        """Muestra un cuadro de diálogo para cambiar el tema del canal."""
+        try:
+            target = self.active_target.get()
+            channel = target.split("Canal: ")[1]
+        except IndexError:
+            messagebox.showerror("Error", "Debes seleccionar un canal.")
+            return
+
+        # Solicitar el nuevo tema
         topic = simpledialog.askstring("Cambiar tema", "Ingresa el nuevo tema:")
+        if topic is None:  # Si el usuario cancela el diálogo
+            return
 
-        channel = target.split("Canal: ")[1]
-        self.connection.change_topic(channel, topic)
+        def execute_change_topic():
+            """Ejecuta el comando TOPIC en un hilo separado."""
+            try:
+                self.connection.change_topic(channel, topic)  # Enviar el comando TOPIC al servidor
+                self.channel_topic.config(text=f"{topic}")  # Actualizar la interfaz gráfica
+                messagebox.showinfo("Éxito", f"El tema del canal {channel} ha sido actualizado.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo cambiar el tema: {e}")
 
-        self.channel_topic.config(text=f"{topic}")
+        # Crear un hilo para ejecutar el comando
+        thread = threading.Thread(target=execute_change_topic, daemon=True)
+        thread.start()
+
 
     def invite_to_channel(self):
-        channel = self.active_target.get().split("Canal: ")[1]
+        """Solicita el nombre de un usuario y envía una invitación para unirse al canal activo."""
+        try:
+            # Obtener el canal activo
+            channel = self.active_target.get().split("Canal: ")[1]
+        except IndexError:
+            messagebox.showerror("Error", "Debes seleccionar un canal.")
+            return
+
+        # Solicitar el nombre del usuario a invitar
         target = simpledialog.askstring("Extender invitación", "Ingresa el nombre del usuario:")
+        if not target:
+            return  # Si el usuario cancela el diálogo, no hace nada
 
-        user = target.split("Usuario: ")[1]
-        self.connection.invite(user, channel)
+        def execute_invite():
+            """Ejecuta el comando INVITE en un hilo separado."""
+            try:
+                self.connection.invite(target, channel)  # Enviar el comando INVITE
+                messagebox.showinfo("Notificación", f"Invitación enviada a {target} para unirse al canal {channel}.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo enviar la invitación: {e}")
 
-        messagebox.showinfo("Notificación", f"Invitación enviada a {target}")
+        # Crear un hilo para ejecutar el comando
+        thread = threading.Thread(target=execute_invite, daemon=True)
+        thread.start()
+
 
     def invite_user(self):
-        user = self.active_target.get()
-        channel = simpledialog.askstring("Extender invitación", "Ingresa el nombre del canal:")
-        
-        channel = channel.split("Canal: ")[1]
-        self.connection.invite(user, channel)
+        """Solicita el canal y envía una invitación a un usuario fijo."""
+        try:
+            # Obtener el usuario activo
+            user = self.active_target.get().split("Usuario: ")[1]
+        except IndexError:
+            messagebox.showerror("Error", "Debes seleccionar un usuario.")
+            return
 
-        messagebox.showinfo("Notificación", f"Invitación enviada a {user}")
+        # Solicitar el canal donde invitar al usuario
+        channel = simpledialog.askstring("Extender invitación", f"Ingrese el nombre del canal para invitar a {user}:")
+        if not channel:
+            return  # Si el usuario cancela el diálogo
+
+        def execute_invite():
+            """Ejecuta el comando INVITE en un hilo separado."""
+            try:
+                self.connection.invite(user, channel)  # Enviar el comando INVITE
+                messagebox.showinfo("Notificación", f"Invitación enviada a {user} para unirse al canal {channel}.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo enviar la invitación: {e}")
+
+        # Crear un hilo para ejecutar el comando
+        thread = threading.Thread(target=execute_invite, daemon=True)
+        thread.start()
+
 
     def kick_user(self):
-        channel = self.active_target.get().split("Canal: ")[1]
-        
+        """Muestra una ventana para expulsar a un usuario de un canal."""
+        try:
+            channel = self.active_target.get().split("Canal: ")[1]
+        except IndexError:
+            messagebox.showerror("Error", "Debes seleccionar un canal.")
+            return
+
         kick_window = tk.Toplevel(self)
-        kick_window.title("Banear usuario")
+        kick_window.title("Expulsar usuario")
         kick_window.geometry("300x200")
 
         # Entradas de datos
@@ -775,39 +919,85 @@ class MainView(tk.Tk):
         username_entry = tk.Entry(kick_window)
         username_entry.pack(pady=5)
 
-        tk.Label(kick_window, text="Razón:").pack(pady=5)
-        reason_entry = tk.Entry(kick_window, show="*")
+        tk.Label(kick_window, text="Razón (opcional):").pack(pady=5)
+        reason_entry = tk.Entry(kick_window)
         reason_entry.pack(pady=5)
 
         def call_command():
-            user = username_entry.get().split("Usuario: ")[1]
-            reason = reason_entry.get()
-            
-            self.connection.kick(channel, user, reason)
+            """Ejecuta el comando KICK en un hilo separado."""
+            user = username_entry.get().strip()
+            reason = reason_entry.get().strip()
 
-        submit_button = tk.Button(kick_window, text="Guardar", command=call_command)
+            if not user:
+                messagebox.showerror("Error", "El nombre del usuario no puede estar vacío.")
+                return
+
+            def execute_kick():
+                try:
+                    self.connection.kick(channel, user, reason if reason else "Expulsado")  # Comando KICK
+                    messagebox.showinfo("Éxito", f"Usuario {user} expulsado del canal {channel}.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo expulsar al usuario: {e}")
+
+            # Crear un hilo para ejecutar el comando
+            thread = threading.Thread(target=execute_kick, daemon=True)
+            thread.start()
+
+        submit_button = tk.Button(kick_window, text="Expulsar", command=call_command)
         submit_button.pack(pady=10)
 
     def check_users(self):
-        """Muestra una lista deslizante con los usuarios y permisos de un canal. Comando names"""
-        channel = self.active_target.get()
+        """Solicita y muestra la lista de usuarios en un canal usando el comando NAMES."""
+        try:
+            # Obtener el canal activo
+            channel = self.active_target.get().split("Canal: ")[1]
+        except IndexError:
+            messagebox.showerror("Error", "Debes seleccionar un canal.")
+            return
 
-        # Simulación de datos recibidos tras un comando WHOIS
-        # Estos datos deberían ser recuperados de la lógica real del cliente IRC
-        simulated_users = [
-            {"username": "Alice", "permissions": "+o (Operador)"},
-            {"username": "Bob", "permissions": "+v (Voz)"},
-            {"username": "Charlie", "permissions": "Sin permisos"},
-            {"username": "Dana", "permissions": "+o (Operador)"}
-        ]
+        # Crear una cola para almacenar los usuarios del canal
+        self.users_queue = queue.Queue()
 
-        # Crear una nueva ventana para mostrar los usuarios
+        def request_names():
+            """Hilo para solicitar y procesar la lista de usuarios del canal."""
+            try:
+                # Enviar el comando NAMES al servidor
+                self.connection.names(channel)
+
+                # Procesar todas las líneas de respuesta
+                users = []
+                for response in self.connection.receive():
+                    if isinstance(response, tuple) and response[1] == "353":  # Código 353 para NAMES
+                        # Los usuarios están en el trailing (última parte del mensaje)
+                        users_in_line = response[3].split()
+                        users.extend(users_in_line)
+                    elif isinstance(response, tuple) and response[1] == "366":  # Fin de NAMES
+                        break
+
+                # Pasar la lista de usuarios a la cola
+                for user in users:
+                    self.users_queue.put(user)
+                self.users_queue.put(None)  # Fin de los datos
+            except Exception as e:
+                self.users_queue.put(f"Error: {e}")
+                self.users_queue.put(None)  # Fin de los datos en caso de error
+
+        # Crear un hilo para ejecutar la solicitud
+        thread = threading.Thread(target=request_names, daemon=True)
+        thread.start()
+
+        # Mostrar la ventana con los usuarios
+        self.display_users_window(channel)
+
+    def display_users_window(self, channel):
+        """Muestra una ventana con la lista de usuarios del canal."""
         users_window = tk.Toplevel(self)
         users_window.title(f"Usuarios en {channel}")
         users_window.geometry("300x400")
         users_window.configure(bg=self.colors["bg"])
 
-        tk.Label(users_window, text=f"Usuarios en {channel}", font=("Arial", 16, "bold"), bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
+        tk.Label(users_window, text=f"Usuarios en {channel}", font=("Arial", 16, "bold"),
+                bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
 
         # Frame para contener la lista y la barra de desplazamiento
         list_frame = tk.Frame(users_window, bg=self.colors["bg"])
@@ -817,15 +1007,30 @@ class MainView(tk.Tk):
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
 
-        # Listbox para mostrar usuarios y permisos
-        user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 14))
+        # Listbox para mostrar usuarios
+        user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+                                bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 14))
         user_listbox.pack(side="left", fill="both", expand=True)
-
-        # Agregar los datos simulados al listbox
-        for user in simulated_users:
-            user_listbox.insert(tk.END, f"{user['username']} - {user['permissions']}")
-
         scrollbar.config(command=user_listbox.yview)
+
+        # Actualizar la lista de usuarios desde la cola
+        def update_users():
+            try:
+                while not self.users_queue.empty():
+                    user = self.users_queue.get()
+                    if user is None:  # Fin de los datos
+                        return
+                    elif isinstance(user, str) and user.startswith("Error:"):
+                        messagebox.showerror("Error", user[7:])
+                    else:
+                        user_listbox.insert(tk.END, user)
+            except Exception as e:
+                print(f"Error actualizando la lista de usuarios: {e}")
+            finally:
+                self.after(100, update_users)
+
+        update_users()
+
 
     def get_topic(self):
         target = self.active_target.get()
@@ -837,27 +1042,93 @@ class MainView(tk.Tk):
         return " "
 
     def other_cmd(self):
-
+        """
+        Abre una ventana para permitir la entrada de comandos IRC personalizados.
+        """
         command_window = tk.Toplevel(self)
         command_window.title("Comandos")
-        command_window.geometry("500x200")
+        command_window.geometry("500x400")
 
         # Entradas de datos
         tk.Label(command_window, text="Ingrese una línea de comandos:").pack(pady=5)
-        command_entry = tk.Entry(command_window)
+        command_entry = tk.Entry(command_window, width=50)
         command_entry.pack(pady=5)
 
         def process():
-            command = command_entry.get()
+            """Procesa el comando ingresado y lo envía al servidor."""
+            command = command_entry.get().strip()
+            if not self.connection:
+                messagebox.showerror("Error", "No estás conectado al servidor.")
+                return
+
+            if not command:
+                messagebox.showerror("Error", "El comando no puede estar vacío.")
+                return
+
+            def send_command():
+                try:
+                    # Divide el comando en partes: comando, parámetros y trailing
+                    parts = command.split(" ", 1)
+                    irc_command = parts[0].upper()  # Comando en mayúsculas
+                    params_and_trailing = parts[1] if len(parts) > 1 else None
+
+                    # Separa parámetros de trailing (si existe)
+                    if params_and_trailing and ":" in params_and_trailing:
+                        params, trailing = params_and_trailing.split(":", 1)
+                        params = params.strip().split()
+                    else:
+                        params = params_and_trailing.split() if params_and_trailing else []
+                        trailing = None
+
+                    # Enviar el comando al servidor
+                    print(f"Enviando comando: {irc_command}, Params: {params}, Trailing: {trailing}")  # Depuración
+                    self.connection.send(irc_command, params, trailing)
+                    messagebox.showinfo("Comando enviado", f"Comando enviado: {command}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo enviar el comando: {e}")
+
+            # Enviar en un hilo separado
+            thread = threading.Thread(target=send_command, daemon=True)
+            thread.start()
 
         def show_cmd_list():
-            print("commands list")
+            """Muestra una lista de comandos ejecutables con su estructura."""
+            command_list = [
+                "PASS <password>", "USER <username> <hostname> <servername> <realname>",
+                "NICK <nickname>", "OPER <name> <password>", "QUIT [<message>]",
+                "SQUIT <server> [<message>]", "SERVICE <name> <reserved> <distribution> <type> <reserved> <info>",
+                "JOIN <channel>{,<channel>}", "PART <channel>{,<channel>} [<message>]",
+                "MODE <target> <flags> [<parameters>]", "TOPIC <channel> [<new_topic>]",
+                "NAMES [<channel>{,<channel>}]", "LIST [<channel>{,<channel>}]", "INVITE <nickname> <channel>",
+                "KICK <channel> <user> [<message>]", "MOTD", "LUSERS", "VERSION", "STATS",
+                "LINKS", "TIME", "CONNECT <target_server> <port>", "SERVLIST [<mask>]",
+                "SQUERY <service_name> <text>", "TRACE", "ADMIN", "INFO",
+                "PRIVMSG <target> <message>", "NOTICE <target> <message>", "WHO [<mask>]",
+                "WHOIS <nickname>{,<nickname>}", "WHOWAS <nickname>{,<nickname>}",
+                "PING <server>", "PONG <server>", "AWAY [<message>]", "REHASH",
+                "DIE", "RESTART", "ERROR <message>", "KILL <nickname> <message>",
+                "SUMMON <nickname> [<server>]", "USERS [<server>]", "WALLOPS <message>",
+                "USERHOST <nickname>{<nickname>}", "ISON <nickname>{<nickname>}"
+            ]
+            cmd_list_window = tk.Toplevel(command_window)
+            cmd_list_window.title("Comandos ejecutables")
+            cmd_list_window.geometry("500x500")
 
-        submit_button = tk.Button(command_window, text="Guardar", command=process)
+            tk.Label(cmd_list_window, text="Comandos IRC soportados:", font=("Arial", 12, "bold")).pack(pady=10)
+            cmd_listbox = tk.Listbox(cmd_list_window, bg="#f0f0f0", font=("Arial", 10))
+            cmd_listbox.pack(fill="both", expand=True, padx=10, pady=10)
+
+            for cmd in command_list:
+                cmd_listbox.insert(tk.END, cmd)
+
+        # Botones
+        submit_button = tk.Button(command_window, text="Enviar", command=process)
         submit_button.pack(pady=10)
 
-        submit_button = tk.Button(command_window, text="Comandos ejecutables", command=show_cmd_list)
-        submit_button.pack(pady=10)
+        cmd_list_button = tk.Button(command_window, text="Comandos ejecutables", command=show_cmd_list)
+        cmd_list_button.pack(pady=10)
+
+
 
     def live_channel(self):
         channel = self.active_target.split("Canal: ")[1]
