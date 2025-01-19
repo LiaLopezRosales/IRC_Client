@@ -15,6 +15,7 @@ class MainView(tk.Tk):
     - Lista de canales/usuarios.
     - Área de chat.
     - Cinta de estado.
+    - Cinta de información del chat abierto.
     """
     
     def __init__(self):
@@ -102,6 +103,7 @@ class MainView(tk.Tk):
         
         # Llama a este método nuevamente después de 100 ms
         self.after(100, self.process_server_messages)
+
 
     def create_status_bar(self):
         """Cinta superior con estado de conexión."""
@@ -312,7 +314,7 @@ class MainView(tk.Tk):
             ("Conectar Servidor", self.connect_another_server_action),
             ("Info Servidor", self.server_info_action),
             ("Lista Servidores", self.server_list_action),
-            ("Salir", self.quit)
+            ("Salir", self.close)
         ]
 
         for text, command in menu_buttons:
@@ -378,7 +380,7 @@ class MainView(tk.Tk):
             tk.Button(context_menu, text="Invitar al Canal", font=("Arial", 13), command=self.invite_to_channel).pack(pady=5)
             tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
             tk.Button(context_menu, text="Mostrar Usuarios", font=("Arial", 13), command=self.check_users).pack(pady=5)
-            tk.Button(context_menu, text="Dejar Canal", font=("Arial",13), command=self.live_channel).pack(pady=5)
+            tk.Button(context_menu, text="Dejar Canal", font=("Arial",13), command=self.quit_channel).pack(pady=5)
         else:
             tk.Label(context_menu, text=self.get_user_info, font=("Arial", 14, "bold")).pack(pady=5)
             tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
@@ -542,6 +544,9 @@ class MainView(tk.Tk):
             # Vuelve a llamar a esta función después de 100 ms
             self.after(100, self.update_server_list)
 
+    def close(self):
+        self.disconnect_action
+        self.quit
 
     def send_message(self):
         """Envía un mensaje al canal o usuario seleccionado."""
@@ -1129,8 +1134,7 @@ class MainView(tk.Tk):
         cmd_list_button.pack(pady=10)
 
 
-
-    def live_channel(self):
+    def quit_channel(self):
         channel = self.active_target.split("Canal: ")[1]
         self.connection.part_channel(channel)
         self.active_target = tk.StringVar(value="Ninguno seleccionado")
