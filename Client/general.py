@@ -26,7 +26,7 @@ class MainView(tk.Tk):
         
         # Conexión al servidor IRC
         self.connection = None
-        self.server_messages = queue.Queue()
+        self.server_messages = queue.Queue()  # Cola para mensajes del servidor
 
         # Variables de estado
         self.active_target = tk.StringVar(value="Ninguno seleccionado")
@@ -34,9 +34,9 @@ class MainView(tk.Tk):
         self.connected = tk.StringVar(value="Desconectado")
         self.is_authenticated = False  # Usuario autenticado
         self.is_connected = False  # Estado de conexión al servidor
-        self.username=None
-        self.password=None
-        self.nick=None
+        self.username = None
+        self.password = None
+        self.nick = None
 
         # Colores personalizables
         self.colors = {
@@ -56,7 +56,6 @@ class MainView(tk.Tk):
         self.create_chat_area()
      
     def start_receiving(self):
-        print("Empezando a recibir")
         """Inicia un hilo para escuchar respuestas del servidor."""
         def listen():
             """
@@ -64,45 +63,44 @@ class MainView(tk.Tk):
             """
             while self.is_connected:
                 try:
-                    for response in self.connection.receive():
-                        if response:
-                            # Manejo de mensajes parseados
-                            if isinstance(response, str):
-                                # Mensajes como PONG enviado
-                                self.display_message(response)
-                            else:
-                                # Mensajes parseados normales
-                                prefix, command, params, trailing = response
-                                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
-                                self.display_message(display_text)
-                except ProtocolError as e:
-                    print(f"Error de protocolo: {e}")
+                    self.connection.receive(self.server_messages)  # Pasa la cola de mensajes
                 except Exception as e:
                     print(f"Error al recibir mensaje: {e}")
                     self.is_connected = False
                     self.update_connection_status(False)
                     break
 
-    
         thread = threading.Thread(target=listen, daemon=True)
-        thread.start() 
+        thread.start()
         
     def process_server_messages(self):
         """Procesa los mensajes del servidor desde la cola."""
         while not self.server_messages.empty():
             try:
-                response = self.server_messages.get()
-                prefix, command, params, trailing = response
-                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
-                self.display_message(display_text)
-            except ValueError:
-                print(f"Error: Formato inesperado del mensaje: {response}")
-                self.display_message(f"Mensaje inesperado: {response}")
+                message = self.server_messages.get()
+                self.display_message(message)  # Muestra el mensaje en el área de chat
             except Exception as e:
                 print(f"Error procesando mensaje: {e}")
         
         # Llama a este método nuevamente después de 100 ms
         self.after(100, self.process_server_messages)
+        
+    # def process_server_messages(self):
+    #     """Procesa los mensajes del servidor desde la cola."""
+    #     while not self.server_messages.empty():
+    #         try:
+    #             response = self.server_messages.get()
+    #             prefix, command, params, trailing = response
+    #             display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
+    #             self.display_message(display_text)
+    #         except ValueError:
+    #             print(f"Error: Formato inesperado del mensaje: {response}")
+    #             self.display_message(f"Mensaje inesperado: {response}")
+    #         except Exception as e:
+    #             print(f"Error procesando mensaje: {e}")
+        
+    #     # Llama a este método nuevamente después de 100 ms
+    #     self.after(100, self.process_server_messages)
 
 
     def create_status_bar(self):
@@ -587,7 +585,7 @@ class MainView(tk.Tk):
     def connect_action(self):
         """Solicitar servidor y puerto en un solo formulario."""
         if not self.is_authenticated:
-            messagebox.showerror("Conectar","Debes autenticarte primero")
+            messagebox.showerror("Conectar", "Debes autenticarte primero")
             return
         
         connect_window = tk.Toplevel(self)
@@ -611,10 +609,10 @@ class MainView(tk.Tk):
             try:
                 int(port)  # Verificar si es numérico
                 self.connection = ClientConnection(server, port)
-                self.connection.connect_client(self.password,self.nick,self.username)
+                self.connection.connect_client(self.password, self.nick, self.username)
                 self.is_connected = True
                 self.start_receiving()
-                self.process_server_messages()
+                self.process_server_messages()  # Iniciar el procesamiento de mensajes
                 self.update_connection_status(True)
                 self.update_buttons()
                 messagebox.showinfo("Conectado", f"Conectando a {server}:{port}...")

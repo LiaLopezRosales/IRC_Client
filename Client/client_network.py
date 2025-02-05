@@ -62,42 +62,42 @@ class ClientConnection:
         except Exception as e:
             raise IRCConnectionError(f"Error al enviar mensaje: {e}")
 
-    def receive(self):
+    def receive(self, message_queue=None):
         """
-        Recibe y procesa mensajes del servidor.
+        Recibe y procesa mensajes del servidor en tiempo real.
         Responde automáticamente a PING.
-        Procesa respuestas PONG cuando se envían PINGs.
 
-        Yields:
-            tuple: (prefix, command, params, trailing) para cada línea procesada.
+        Args:
+            message_queue (queue.Queue, optional): Cola para enviar mensajes a la interfaz gráfica.
+                                                Si es None, los mensajes se imprimen en la consola.
         """
         try:
-            # Leer datos del servidor
-            data = self.ssl_socket.recv(4096).decode('utf-8').strip()
-            if not data:
-                return None
+            while True:
+                # Leer datos del servidor
+                data = self.ssl_socket.recv(4096).decode('utf-8').strip()
+                if not data:
+                    break
 
-            # Dividir los mensajes en líneas por el delimitador IRC (\r\n)
-            responses = data.split('\r\n')
+                # Dividir los mensajes en líneas por el delimitador IRC (\r\n)
+                responses = data.split('\r\n')
 
-            # Procesar cada línea
-            for line in responses:
+                # Procesar cada línea
+                for line in responses:
+                    if line.startswith("PING"):
+                        # Responder automáticamente a PING con PONG
+                        server_name = line.split()[1]
+                        print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
+                        self.pong(server_name)
+                    else:
+                        if message_queue:
+                            # Enviar el mensaje a la cola para que lo procese la interfaz gráfica
+                            message_queue.put(line)
+                        else:
+                            # Imprimir el mensaje en la consola (para main.py)
+                            print(f"Mensaje recibido: {line}")
 
-                if line.startswith("PING"):
-                    # Responder automáticamente a PING con PONG
-                    server_name = line.split()[1]
-                    print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
-                    self.pong(server_name)
-                    yield f"PONG enviado a {server_name}"
-                else:
-                    # Parsear el mensaje y devolverlo
-                    try:
-                        parsed = parse_message(line)
-                        yield parsed  # Devuelve el mensaje parseado
-                    except ProtocolError as e:
-                        print(f"Error al parsear el mensaje: {e}")
         except Exception as e:
-            raise IRCConnectionError(f"Error al recibir mensaje: {e}")
+            print(f"Error al recibir mensaje: {e}")
 
     def join_channel(self, channel):
         """
