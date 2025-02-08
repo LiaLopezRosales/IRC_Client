@@ -2,6 +2,7 @@ import socket
 import ssl
 from threading import Thread
 import time
+import uuid
 
 
 class IRCServer:
@@ -16,6 +17,8 @@ class IRCServer:
         self.clients = {}  # Almacena clientes como {nickname: socket}
         self.channels = {}  # {channel_name: {"users": [nicknames], "operators": [nicknames]}}
         self.whowas = {}    # {nickname: {...}} para almacenar usuarios desconectados
+        self.ping_interval = 30  # Segundos entre PINGs
+        self.ping_timeout = 280  # Tiempo máximo sin PONG antes de desconectar
 
 #/connect -ssl 127.0.0.1 6667
 
@@ -30,6 +33,59 @@ class IRCServer:
         print(f"[SERVER] Servidor simulado escuchando en {self.host}:{self.port}")
 
         Thread(target=self._accept_clients, daemon=True).start()
+        Thread(target=self._send_pings, daemon=True).start()
+        Thread(target=self._check_inactive_clients, daemon=True).start()
+        
+    def _send_pings(self):
+        """Envía PINGs periódicos a los clientes."""
+        while self.running:
+            time.sleep(self.ping_interval)
+            current_time = time.time()
+            for nick, data in list(self.clients.items()):
+                try:
+                    # Usar el nombre del servidor como token
+                    token = str(uuid.uuid4())  # Genera un UUID único para cada PING
+                    data["socket"].sendall(f"PING :{token}\r\n".encode("utf-8"))
+                    data["ping_token"] = token  # Almacenar el nombre del servidor
+                    data["last_ping_sent"] = current_time
+                except Exception as e:
+                    print(f"[ERROR] Error enviando PING a {nick}: {e}")
+                        
+    def _check_inactive_clients(self):
+        """Desconecta clientes inactivos."""
+        while self.running:
+            time.sleep(100)
+            current_time = time.time()
+            to_remove = []
+            for nick, data in list(self.clients.items()):
+                last_pong = data.get("last_pong", 0)
+                last_ping = data.get("last_ping_sent", 0)
+                # Verificar si no ha respondido al PING o no se ha enviado PING
+                if (current_time - last_pong > self.ping_timeout) or (
+                    current_time - last_ping > self.ping_timeout
+                ):
+                    print(f"[SERVER] Desconectando a {nick} por inactividad")
+                    to_remove.append(nick)
+            for nick in to_remove:
+                self._disconnect_client(nick, "Ping timeout")
+                
+    def _disconnect_client(self, nick, reason):
+        """Limpia los datos del cliente desconectado."""
+        if nick in self.clients:
+            try:
+                self.clients[nick]["socket"].close()
+            except:
+                pass
+            del self.clients[nick]
+            # Limpiar canales y WHOWAS
+            for channel in list(self.channels.keys()):
+                if nick in self.channels[channel]["users"]:
+                    self.channels[channel]["users"].remove(nick)
+                    if nick in self.channels[channel]["operators"]:
+                        self.channels[channel]["operators"].remove(nick)
+                    if not self.channels[channel]["users"]:
+                        del self.channels[channel]
+            print(f"[SERVER] {nick} desconectado: {reason}")
 
     def _accept_clients(self):
         """
@@ -80,17 +136,36 @@ class IRCServer:
                     # Si el usuario ya tiene un nick registrado (cambio de nick)
                     if nickname and nickname in self.clients:
                         old_nick = nickname
-                        self.clients[new_nick] = self.clients.pop(old_nick)  # Cambiar el nick en el diccionario
+
+                        # Guardar el nick antiguo en WHOWAS
+                        user_data = {
+                            "nickname": old_nick,
+                            "username": self.clients[old_nick].get("username", "~user"),
+                            "hostname": self.clients[old_nick].get("hostname", addr[0]),  # Usar hostname almacenado
+                            "realname": self.clients[old_nick].get("realname", "Desconocido"),
+                            "disconnected_time": time.time()
+                        }
+
+                        if old_nick not in self.whowas:
+                            self.whowas[old_nick] = []
+                        self.whowas[old_nick].insert(0, user_data)
+                        if len(self.whowas[old_nick]) > 10:
+                            self.whowas[old_nick].pop()
+
+                        # Actualizar el nick en el diccionario
+                        self.clients[new_nick] = self.clients.pop(old_nick)
                         nickname = new_nick
                         ssl_socket.sendall(f":{old_nick} NICK {new_nick}\r\n".encode('utf-8'))
                         print(f"[SERVER] {old_nick} cambió su nick a {new_nick}")
+
                     else:
-                        # Registro inicial del NICK
+                        # Registro inicial del NICK (guardar hostname desde addr)
                         self.clients[new_nick] = {
                             "socket": ssl_socket,
-                            "modes": [],  # Inicializar la lista de modos del usuario
+                            "modes": [],
                             "username": None,
-                            "realname": None
+                            "realname": None,
+                            "hostname": addr[0]  # Almacenar IP al registrar
                         }
                         nickname = new_nick
                         ssl_socket.sendall(f":mock.server 001 {new_nick} :Bienvenido al servidor\r\n".encode('utf-8'))
@@ -120,7 +195,8 @@ class IRCServer:
                     ssl_socket.sendall(f":mock.server 003 {nickname} :Este servidor fue creado hoy\r\n".encode('utf-8'))
                     ssl_socket.sendall(f":mock.server 004 {nickname} mock.server 1.0 o o\r\n".encode('utf-8'))
                     print(f"[SERVER] Cliente {nickname} registrado con USER: {username}, Nombre Real: {realname}")
-                    
+                
+                #No implementada autentificación ya que el servidor no tiene conexión restringida, posible extensión luego    
                 elif data.startswith("PASS"):
                     parts = data.split()
                     if len(parts) < 2:
@@ -413,35 +489,34 @@ class IRCServer:
                         continue
 
                     target = parts[1]
-                    if target not in self.whowas:
+                    if target not in self.whowas or not self.whowas[target]:
                         ssl_socket.sendall(f":mock.server 406 {nickname} {target} :No hay información histórica\r\n".encode('utf-8'))
                         continue
 
-                    # Enviar datos históricos del usuario (ejemplo)
+                    # Enviar todas las entradas históricas del usuario
                     for entry in self.whowas[target]:
                         ssl_socket.sendall(
-                            f":mock.server 314 {nickname} {target} {entry['username']} {entry['hostname']} * :{entry['realname']}\r\n".encode('utf-8')
+                            f":mock.server 314 {nickname} {entry['nickname']} {entry['username']} {entry['hostname']} * :{entry['realname']}\r\n".encode('utf-8')
                         )
-
-                    # Fin de la lista
                     ssl_socket.sendall(f":mock.server 369 {nickname} {target} :Fin de la lista WHOWAS\r\n".encode('utf-8'))
                     
-                elif data.startswith("WHO "):
+                elif data.startswith("WHO"):
                     parts = data.split()
                     channel = parts[1] if len(parts) > 1 else None
 
-                    # WHO sin parámetros: listar todos los usuarios no invisibles
+                    # WHO sin parámetros: listar usuarios no invisibles en todo el servidor
                     if not channel:
                         for user, details in self.clients.items():
                             if "+i" not in details["modes"]:
-                                flags = "H" if details.get("username") else "G"
+                                username = details.get("username", "~user")
+                                flags = "H"  # H = Usuario disponible (no away)
                                 ssl_socket.sendall(
-                                    f":mock.server 352 {nickname} * {details['username']} {self.host} mock.server {user} {flags} :0 {details['realname']}\r\n".encode('utf-8')
+                                    f":mock.server 352 {nickname} * {username} {self.host} mock.server {user} {flags} :0 {details['realname']}\r\n".encode('utf-8')
                                 )
                         ssl_socket.sendall(f":mock.server 315 {nickname} * :Fin de la lista WHO\r\n".encode('utf-8'))
                         continue
 
-                    # WHO para un canal
+                    # WHO para un canal específico
                     if channel not in self.channels:
                         ssl_socket.sendall(f":mock.server 403 {nickname} {channel} :No existe el canal\r\n".encode('utf-8'))
                         continue
@@ -449,11 +524,10 @@ class IRCServer:
                     for user in self.channels[channel]["users"]:
                         if "+i" in self.clients[user]["modes"] and nickname not in self.channels[channel]["users"]:
                             continue  # Ocultar usuarios invisibles a extraños
-                        flags = "H" if self.clients[user].get("username") else "G"
-                        if user in self.channels[channel]["operators"]:
-                            flags += "@"
+                        username = self.clients[user].get("username", "~user")
+                        flags = "H@ " if user in self.channels[channel]["operators"] else "H"
                         ssl_socket.sendall(
-                            f":mock.server 352 {nickname} {channel} {self.clients[user]['username']} {self.host} mock.server {user} {flags} :0 {self.clients[user]['realname']}\r\n".encode('utf-8')
+                            f":mock.server 352 {nickname} {channel} {username} {self.host} mock.server {user} {flags} :0 {self.clients[user]['realname']}\r\n".encode('utf-8')
                         )
                     ssl_socket.sendall(f":mock.server 315 {nickname} {channel} :Fin de la lista WHO\r\n".encode('utf-8'))
                     
@@ -557,6 +631,34 @@ class IRCServer:
                         print(f"[SERVER] Notificación enviada a {target}: {message}")
                         
                 
+                elif data.startswith("VERSION"):
+                    version_response = (
+                        f":mock.server 351 {nickname} mock.irc.server-1.0 mock.server :Python IRC Server\r\n"
+                    )
+                    ssl_socket.sendall(version_response.encode("utf-8"))
+                    
+                elif data.startswith("STATS"):
+                    parts = data.split()
+                    if len(parts) < 2:
+                        error_msg = f":mock.server 461 {nickname} STATS :Faltan parámetros\r\n"
+                        ssl_socket.sendall(error_msg.encode("utf-8"))
+                        continue
+
+                    query = parts[1].upper()
+                    if query == "L":  # Ejemplo: Estadísticas de conexiones
+                        stats_msg = (
+                            f":mock.server 211 {nickname} mock.server :Estadísticas del servidor\r\n"
+                            f":mock.server 251 {nickname} :Usuarios conectados: {len(self.clients)}\r\n"
+                            f":mock.server 255 {nickname} :Canales activos: {len(self.channels)}\r\n"
+                        )
+                        ssl_socket.sendall(stats_msg.encode("utf-8"))
+                    else:
+                        error_msg = f":mock.server 219 {nickname} {query} :Tipo de STATS no soportado\r\n"
+                        ssl_socket.sendall(error_msg.encode("utf-8"))
+
+                    end_msg = f":mock.server 219 {nickname} {query} :Fin de STATS\r\n"
+                    ssl_socket.sendall(end_msg.encode("utf-8"))
+    
                 elif data.startswith("PING"):
                     server_name = data.split()[1]
                     ssl_socket.sendall(f"PONG {server_name}\r\n".encode('utf-8'))
@@ -564,21 +666,37 @@ class IRCServer:
 
                 elif data.startswith("PONG"):
                     print(f"[SERVER] PONG recibido de {nickname}")
-
+                    if nickname in self.clients:
+                        parts = data.split(":", 1)
+                        if len(parts) >= 2:
+                            received_token = parts[1].strip()
+                            stored_token = self.clients[nickname].get("ping_token", "")
+                            if received_token == stored_token:
+                                self.clients[nickname]["last_pong"] = time.time()
+                                print(f"[SERVER] PONG válido de {nickname}")
+                            else:
+                                print(f"[SERVER] Token inválido de {nickname}")
+                                
                 elif data.startswith("QUIT"):
                     reason = data.split(":", 1)[1] if ":" in data else "Desconexión voluntaria"
                     print(f"[SERVER] {nickname} se ha desconectado: {reason}")
                     ssl_socket.sendall(f":mock.server 221 {nickname} QUIT :{reason}\r\n".encode('utf-8'))
 
-                    # Guardar en self.whowas
                     if nickname in self.clients:
-                        self.whowas[nickname] = {
-                            "realname": self.clients[nickname].get("realname", "Desconocido"),
+                        # Guardar en WHOWAS
+                        user_data = {
                             "nickname": nickname,
-                            "hostname": addr[0],  # Dirección IP del cliente
-                            "servername": "mock.server",
-                            "disconnected_time": time.strftime("%Y-%m-%d %H:%M:%S")
+                            "username": self.clients[nickname].get("username", "~user"),
+                            "hostname": addr[0],
+                            "realname": self.clients[nickname].get("realname", "Desconocido"),
+                            "disconnected_time": time.time()
                         }
+                        # Almacenar hasta 10 entradas históricas por usuario
+                        if nickname not in self.whowas:
+                            self.whowas[nickname] = []
+                        self.whowas[nickname].insert(0, user_data)  # Insertar al inicio
+                        if len(self.whowas[nickname]) > 10:
+                            self.whowas[nickname].pop()  # Mantener solo 10 registros
 
                     # Eliminar al usuario de todos los canales
                     for channel, details in self.channels.items():
