@@ -1,7 +1,7 @@
 # shared_constants.py
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 6667
+DEFAULT_PORT = 8080
 
 # Comandos estándar del protocolo IRC (RFC 2812)
 IRC_COMMANDS = {
