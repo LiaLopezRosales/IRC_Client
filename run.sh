@@ -2,4 +2,4 @@
 
 # Replace the next shell command with the entrypoint of your solution
 
-python3 client_main.py "$@"
+python3 Client/client_main.py "$@"
