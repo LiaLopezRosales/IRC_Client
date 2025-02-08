@@ -1,51 +1,11 @@
-import os
+import os, sys
+import json
 
 def make_request(method, path, headers=None, data=None):
-    headerstr = "" if headers is None else f" -h {headers}"
-    datastr = "" if data is None else f" -b {data}"
-    response_string = os.popen(f"run.sh -m {method} -u http://localhost:8080/{path}{headerstr}{datastr}").read()
-    return response_string
-
-
-# Ejemplo:
-
-#     import os
-#     import json
-
-#     def make_request(method, path, headers=None, data=None):
-
-#         headers_json = json.dumps(headers) if headers else '{}'
-#         data_json = json.dumps(data) if data else '{}'
-
-#         command = f'python3 tests/http/client.py {method} "http://localhost:8080{path}" {headers_json} "{data_json}"'
-#         response_string = os.popen(command).read()
-
-#         response_data = json.loads(response_string)
-
-#         return response_data
-
-#############################################################
-#############################################################
-#############################################################
-#############################################################
-#############################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    headerstr = "-h {}" if headers is None else f" -h {headers}"
+    datastr = "" if data is None else f" -d {data}"
+    response_string = os.popen(f"sh run.sh -m {method} -u http://localhost:8080{path} {headerstr} {datastr}").read()
+    return json.loads(response_string) # JSON con campos status, body y headers
 
 # Almacena los resultados de las pruebas
 results = []
@@ -88,11 +48,11 @@ response = make_request("GET", "/secure")
 evaluate_response("GET secure without Authorization", 401, response['status'], "Authorization header missing", response['body'])
 
 print_case("GET secure with valid Authorization", "Testing GET request to '/secure' with valid authorization")
-response = make_request("GET", "/secure", headers='{"Authorization": "Bearer 12345"}')
+response = make_request("GET", "/secure", headers='{\\"Authorization\\":\\"Bearer\\ 12345\\"}')
 evaluate_response("GET secure with valid Authorization", 200, response['status'], "You accessed a protected resource", response['body'])
 
 print_case("GET secure with invalid Authorization", "Testing GET request to '/secure' with invalid authorization")
-response = make_request("GET", "/secure", headers='{"Authorization": "Bearer invalid_token"}')
+response = make_request("GET", "/secure", headers='{\\"Authorization\\":\\ \\"Bearer\\ invalid_token\\"}')
 evaluate_response("GET secure with invalid Authorization", 401, response['status'], "Invalid or missing authorization token", response['body'])
 
 # Ajuste en PUT request
@@ -122,7 +82,7 @@ print_case("Malformed POST body", "Testing POST request with malformed JSON body
 response = make_request(
     "POST",
     "/secure",
-    headers='{"Authorization": "Bearer 12345", "Content-Type": "application/json"}',
+    headers='{\\"Authorization\\":\\ \\"Bearer\\ 12345\\",\\ \\"Content-Type\\":\\ \\"application/json\\"}',
     data='{"key":}'
 )
 evaluate_response(
@@ -138,7 +98,7 @@ print_case("Malformed POST body without Authorization", "Testing POST request wi
 response = make_request(
     "POST",
     "/secure",
-    headers='{"Content-Type": "application/json"}',
+    headers='{\\"Content-Type\\":\\ \\"application/json\\"}',
     data='{"key":}'
 )
 evaluate_response(
@@ -171,3 +131,4 @@ if failed_cases > 0:
             if result['expected_body'] and result['actual_body']:
                 print(f"      - Expected body: {result['expected_body']}")
                 print(f"      - Actual body: {result['actual_body']}\n")
+    sys.exit(1)

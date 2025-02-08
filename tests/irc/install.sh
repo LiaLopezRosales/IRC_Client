@@ -1,1 +1,2 @@
-docker run -d ircd/unrealircd:edge
+echo "Executing server"
+python3 "tests/irc/tester.py"
