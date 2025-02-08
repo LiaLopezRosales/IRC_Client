@@ -19,6 +19,7 @@ class IRCServer:
         self.whowas = {}    # {nickname: {...}} para almacenar usuarios desconectados
         self.ping_interval = 30  # Segundos entre PINGs
         self.ping_timeout = 280  # Tiempo máximo sin PONG antes de desconectar
+        self.pending_users = {}
 
 #/connect -ssl 127.0.0.1 6667
 
@@ -104,6 +105,26 @@ class IRCServer:
                 Thread(target=self._handle_client, args=(ssl_socket, addr), daemon=True).start()
             except Exception as e:
                 print(f"[ERROR] Error al aceptar cliente: {e}")
+                
+    def _complete_registration(self, nick, ssl_socket):
+        """Envía mensajes de bienvenida tras NICK + USER exitosos."""
+        user_info = self.pending_users.get(ssl_socket)
+        if user_info:
+            self.clients[nick]["username"] = user_info["username"]
+            self.clients[nick]["realname"] = user_info["realname"]
+            # Limpiar datos temporales
+            del self.pending_users[ssl_socket]
+        
+        # Mensajes de registro
+        welcome_msgs = [
+            f":mock.server 001 {nick} :Bienvenido al servidor",
+            f":mock.server 002 {nick} :Tu host es mock.server",
+            f":mock.server 003 {nick} :Este servidor fue creado hoy",
+            f":mock.server 004 {nick} mock.server 1.0 o o"
+        ]
+        for msg in welcome_msgs:
+            ssl_socket.sendall(f"{msg}\r\n".encode('utf-8'))
+        print(f"[SERVER] Cliente {nick} registrado completamente")
 
     def _handle_client(self, ssl_socket, addr):
         """
@@ -159,17 +180,18 @@ class IRCServer:
                         print(f"[SERVER] {old_nick} cambió su nick a {new_nick}")
 
                     else:
-                        # Registro inicial del NICK (guardar hostname desde addr)
                         self.clients[new_nick] = {
                             "socket": ssl_socket,
                             "modes": [],
                             "username": None,
                             "realname": None,
-                            "hostname": addr[0]  # Almacenar IP al registrar
+                            "hostname": addr[0]
                         }
                         nickname = new_nick
-                        ssl_socket.sendall(f":mock.server 001 {new_nick} :Bienvenido al servidor\r\n".encode('utf-8'))
                         print(f"[SERVER] Cliente registrado con NICK: {new_nick}")
+                        
+                        if ssl_socket in self.pending_users:
+                            self._complete_registration(new_nick, ssl_socket)
     
                 elif data.startswith("USER"):
                     parts = data.split()
@@ -178,24 +200,19 @@ class IRCServer:
                         print("[SERVER] Comando USER rechazado: Faltan parámetros")
                         continue
 
-                    # Verificar si el NICK ya fue registrado
-                    if not nickname or nickname not in self.clients:
-                        ssl_socket.sendall(f":mock.server 451 * :Debes registrar un NICK antes de usar USER\r\n".encode('utf-8'))
-                        print("[SERVER] Comando USER rechazado: NICK no registrado")
-                        continue
-
-                    # Completar la información del usuario
                     username = parts[1]
-                    realname = " ".join(parts[4:])[1:]  # Combinar el resto como nombre real (sin el prefijo ":")
-                    self.clients[nickname]["username"] = username
-                    self.clients[nickname]["realname"] = realname
+                    realname = " ".join(parts[4:])[1:]  # Nombre real sin el ":"
+                    self.pending_users[ssl_socket] = {
+                        "username": username,
+                        "realname": realname
+                    }
 
-                    ssl_socket.sendall(f":mock.server 001 {nickname} :Bienvenido al servidor\r\n".encode('utf-8'))
-                    ssl_socket.sendall(f":mock.server 002 {nickname} :Tu host es mock.server\r\n".encode('utf-8'))
-                    ssl_socket.sendall(f":mock.server 003 {nickname} :Este servidor fue creado hoy\r\n".encode('utf-8'))
-                    ssl_socket.sendall(f":mock.server 004 {nickname} mock.server 1.0 o o\r\n".encode('utf-8'))
-                    print(f"[SERVER] Cliente {nickname} registrado con USER: {username}, Nombre Real: {realname}")
-                
+                    if nickname and nickname in self.clients:
+                        self._complete_registration(nickname, ssl_socket)
+                    else:
+                        ssl_socket.sendall(f":mock.server 451 * :Debes registrar un NICK primero\r\n".encode('utf-8'))
+                        print("[SERVER] USER recibido, esperando NICK válido")
+
                 #No implementada autentificación ya que el servidor no tiene conexión restringida, posible extensión luego    
                 elif data.startswith("PASS"):
                     parts = data.split()
@@ -636,6 +653,9 @@ class IRCServer:
                         f":mock.server 351 {nickname} mock.irc.server-1.0 mock.server :Python IRC Server\r\n"
                     )
                     ssl_socket.sendall(version_response.encode("utf-8"))
+                elif data.startswith("CAP"):
+                    # Manejar CAP LS (necesario para clientes modernos)
+                    ssl_socket.sendall(b":mock.server CAP * LS :\r\n")
                     
                 elif data.startswith("STATS"):
                     parts = data.split()
