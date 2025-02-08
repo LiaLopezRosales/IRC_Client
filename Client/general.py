@@ -38,6 +38,10 @@ class MainView(tk.Tk):
         self.password = None
         self.nick = None
 
+        # Flujo de mensajes
+        self.message_history = {}  # Diccionario para almacenar mensajes
+        self.new_message_indicators = {}  # Para marcar nuevos mensajes
+
         # Colores personalizables
         self.colors = {
             "bg": "#1E1E1E",  # Fondo general
@@ -78,7 +82,34 @@ class MainView(tk.Tk):
         while not self.server_messages.empty():
             try:
                 message = self.server_messages.get()
-                self.display_message(message)  # Muestra el mensaje en el área de chat
+                prefix, command, params, trailing = message
+                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
+
+                # Almacenar mensajes en el historial
+                if command in ["PRIVMSG", "NOTICE"]:  # Ejemplo de comandos
+                    target = params[0]  # Canal o usuario
+                    message = trailing
+                    sender = prefix.split('!')[0]  # Obtener el remitente
+
+                    # Actualizar el historial de mensajes
+                    if target not in self.message_history:
+                        self.message_history[target] = []
+                    self.message_history[target].append((sender, message))  # Guardar remitente y mensaje
+
+                    # Señalizar que hay nuevos mensajes
+                    self.new_message_indicators[target] = True
+
+                # Manejo de mensajes del servidor
+                else:
+                    self.store_server_message(message)
+
+                # Actualizar la lista de canales y usuarios solo una vez
+                self.update_channel_user_list()
+
+            except ValueError:
+                print(f"Error: Formato inesperado del mensaje: {message}")
+                self.display_message(f"Mensaje inesperado: {message}")
+
             except Exception as e:
                 print(f"Error procesando mensaje: {e}")
         
@@ -188,6 +219,24 @@ class MainView(tk.Tk):
 
         for user in ["lia", "Bob", "Charlie"]:
             self.user_list.insert("end", user)
+
+    def update_channel_user_list(self):
+        """Actualiza la lista de canales y usuarios en la interfaz gráfica sin modificar la estructura visual."""
+        self.channel_list.delete(0, tk.END)  # Limpiar la lista actual
+
+        for channel in self.message_history.keys():
+            display_name = channel
+            if self.new_message_indicators.get(channel, False):
+                display_name += "    *"  # Agregar asterisco si hay nuevos mensajes
+            self.channel_list.insert(tk.END, display_name)  # Agregar a la lista
+
+        # Similar para la lista de usuarios
+        self.user_list.delete(0, tk.END)  # Limpiar la lista actual
+        for user in self.user_list_data:  # Suponiendo que tienes una lista de usuarios
+            display_name = user
+            if self.new_message_indicators.get(user, False):
+                display_name += "    *"  # Agregar asterisco si hay nuevos mensajes
+            self.user_list.insert(tk.END, display_name)  # Agregar a la lista
 
     def create_chat_area(self):
         """Área de chat principal con ajustes de tamaño y diseño."""
@@ -572,8 +621,14 @@ class MainView(tk.Tk):
                     return
 
                 # Actualizar la interfaz con el mensaje enviado
-                self.display_message(f"Tú: {message}", sender="self")
+                self.display_message(f"Tú: {message}", sender="self")  # Mostrar el mensaje en el chat
                 self.message_entry.delete(0, tk.END)
+
+                # Guardar el mensaje en el historial
+                if target not in self.message_history:
+                    self.message_history[target] = []
+                self.message_history[target].append(("self", message))  # Guardar el mensaje enviado
+
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo enviar el mensaje: {e}")
 
@@ -766,6 +821,18 @@ class MainView(tk.Tk):
                 selected_user = self.user_list.get(selection[0])
                 self.active_target.set(f"Usuario: {selected_user}")
                 self.active_target_type = 1
+
+        # Limpiar el historial de chat actual
+        self.chat_history.config(state="normal")
+        self.chat_history.delete(1.0, tk.END)
+
+        # Mostrar mensajes del historial para el canal/usuario seleccionado
+        target = self.active_target
+        if target in self.message_history:
+            for sender, message in self.message_history[target]:
+                self.display_message(message, sender)
+
+        self.chat_history.config(state="disabled")
 
     def change_mode(self):
         """Solicita el modo a establecer y lo aplica a un canal, un usuario o un usuario dentro de un canal."""
