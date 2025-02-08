@@ -44,8 +44,8 @@ class ClientConnection:
             self.pass_command(password)  # Cambia "your_password" según tu configuración
             self.nick(nick)              # Cambia "YourNick" por tu apodo deseado
             self.set_user(nick, real_name)  # Cambia "YourRealName" según sea necesario
-            print("Registro completado.")
-            print(f"Conexión segura establecida con {self.host}:{self.port}")
+            # print("Registro completado.")
+            # print(f"Conexión segura establecida con {self.host}:{self.port}")
         
         except Exception as e:
             raise IRCConnectionError(f"Error al conectar: {e}")
@@ -56,7 +56,7 @@ class ClientConnection:
         """
         try:
             message = build_message(command, params, trailing)
-            print(f"Enviando mensaje: {message}")
+            # print(f"Enviando mensaje: {message}")
             self.ssl_socket.sendall(message.encode('utf-8') + b'\r\n')
         
         except Exception as e:
@@ -86,7 +86,7 @@ class ClientConnection:
                     if line.startswith("PING"):
                         # Responder automáticamente a PING con PONG
                         server_name = line.split()[1]
-                        print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
+                        # print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
                         self.pong(server_name)
                     else:
                         if message_queue:
@@ -94,7 +94,7 @@ class ClientConnection:
                             message_queue.put(line)
                         else:
                             # Imprimir el mensaje en la consola (para main.py)
-                            print(f"Mensaje recibido: {line}")
+                            print(line)
 
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
