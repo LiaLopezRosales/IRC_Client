@@ -28,7 +28,7 @@ class ClientConnection:
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
         for attempt in range(retries):
             try:
-                self.socket = socket.create_connection((self.host, self.port))
+                self.ssl_socket = socket.create_connection((self.host, self.port))
                 self.pass_command(password)
                 self.nick(nick)
                 self.set_user(nick, real_name)
@@ -39,8 +39,9 @@ class ClientConnection:
                     print(f"Reintentando conexión ({attempt + 1}/{retries})...")
                     time.sleep(delay)
                 else:
+                    self.is_connected = False
                     raise IRCConnectionError(f"Error al conectar después de {retries} intentos: {e}")
-
+                
     def send(self, command, params=None, trailing=None):
         """
         Envía un mensaje al servidor en formato IRC.

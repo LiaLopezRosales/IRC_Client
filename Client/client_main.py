@@ -205,7 +205,7 @@ def parse_arguments():
 if __name__ == "__main__":
     # Parsear argumentos manualmente
     args = parse_arguments()
-
+    time(5)
     if args["command"] and args["argument"]:
         # Modo de un solo comando (para testers)
         run_single_command_mode(args["host"], args["port"], args["nick"], args["command"], args["argument"])
