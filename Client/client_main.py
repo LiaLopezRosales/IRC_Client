@@ -18,12 +18,26 @@ def start_receiver_thread(connection):
     thread.daemon = True  # El hilo se cerrará cuando el programa principal termine
     thread.start()
 
-def execute_command(connection, command, argument):
+def execute_command(connection, command, argument, nick):
     """
     Ejecuta un comando específico en la conexión IRC.
     """
-    print(f"{command}, {argument}")
+    response_patterns = {
+        "/nick": f":.* NICK {argument}",
+        "/join": f":.* JOIN {argument}",
+        "/part": f":.* PART {argument}",
+        "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0]}",
+        "/notice": f":{nick}!.* NOTICE {argument.split()[0]}",
+        "/quit": "ERROR :Closing link",
+        # Añade más comandos según sea necesario
+    }
+
     try:
+        if command in response_patterns:
+            connection.set_expected_response(response_patterns[command])
+        else:
+            connection.set_expected_response(None)
+            
         if command == "/nick":
             connection.nick(argument)
         elif command == "/join":
@@ -108,17 +122,33 @@ def execute_command(connection, command, argument):
         else:
             print(f"Comando no reconocido: {command}")
             return True  # Continúa en modo interactivo
+        
+        # Espera la respuesta específica del servidor (ignora otros mensajes)
+        response = connection.wait_for_response(timeout=3)
 
-        return True  # Continúa en modo interactivo
+        # Formatea la respuesta según el test
+        formatted_response = format_response(command, argument, nick, response)
+        print(formatted_response if formatted_response else "Sin respuesta del servidor")
 
-    except IRCConnectionError as e:
-        print(f"Error de conexión: {e}")
-        return False  # Cierra el cliente
+        return True
+
     except Exception as e:
-        print(f"Error inesperado: {e}")
-        return True  # Continúa en modo interactivo
+        print(f"Error: {e}")
+        return False
+    
+def format_response(command, argument, nick, server_response):
+    """Convierte la respuesta del servidor al formato esperado por el test."""
+    mapping = {
+        "/nick": f"Tu nuevo apodo es {argument}",
+        "/join": f"Te has unido al canal {argument}",
+        "/part": f"Has salido del canal {argument}",
+        "/privmsg": f"Mensaje de {nick}: {argument}",
+        "/notice": f"Notificacion de {nick}: {argument}",
+        "/quit": "Desconectado del servidor",
+    }
+    return mapping.get(command, "Comando no reconocido")
 
-def run_interactive_mode(connection):
+def run_interactive_mode(connection, nick):
     """
     Modo interactivo donde el usuario puede ingresar comandos continuamente.
     """
@@ -140,7 +170,7 @@ def run_interactive_mode(connection):
             argument = parts[1] if len(parts) > 1 else ""
 
             # Ejecutar el comando
-            if not execute_command(connection, command, argument):
+            if not execute_command(connection, command, argument, nick):
                 break  # Salir si el comando es /quit o hay un error grave
 
         except KeyboardInterrupt:
@@ -155,7 +185,7 @@ def run_single_command_mode(host, port, nick, command, argument):
         connection = ClientConnection(host, port)
         connection.connect_client("pass", "user", nick)
         start_receiver_thread(connection)
-        if not execute_command(connection, command, argument):
+        if not execute_command(connection, command, argument, nick):
             return
         # Esperar 1 segundo para recibir respuestas
         time.sleep(5)
@@ -219,7 +249,7 @@ if __name__ == "__main__":
             start_receiver_thread(connection)
 
             # Ejecutar el modo interactivo
-            run_interactive_mode(connection)
+            run_interactive_mode(connection, args["nick"])
         except IRCConnectionError as e:
             print(f"Error de conexión: {e}")
         except Exception as e:

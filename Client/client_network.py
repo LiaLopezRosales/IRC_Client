@@ -1,6 +1,7 @@
 # client_network.py
 
 import socket
+import threading
 import ssl
 import time
 from Common.irc_protocol import build_message, parse_message
@@ -24,6 +25,20 @@ class ClientConnection:
         self.socket = None
         self.ssl_socket = None
         self.is_connected = False
+        self.expected_response = None  # Respuesta esperada para el comando actual
+        self.response_received = threading.Event()  # Evento para sincronizar
+        self.last_matching_response = None
+        
+    def set_expected_response(self, pattern):
+        """Define el patrón de la respuesta que se espera recibir."""
+        self.expected_response = pattern
+        self.response_received.clear()  # Reinicia el evento
+
+    def wait_for_response(self, timeout=5):
+        """Espera hasta recibir una respuesta que coincida con el patrón."""
+        if self.response_received.wait(timeout=timeout):
+            return self.last_matching_response
+        return None
 
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
         for attempt in range(retries):
@@ -81,13 +96,14 @@ class ClientConnection:
                         # print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
                         self.pong(server_name)
                     else:
+                        # Verifica si la línea coincide con la respuesta esperada
+                        if self.expected_response and self.expected_response in line:
+                            self.last_matching_response = line
+                            self.response_received.set()  # Notifica que llegó la respuesta
                         if message_queue:
-                            # Enviar el mensaje a la cola para que lo procese la interfaz gráfica
                             message_queue.put(line)
                         else:
-                            # Imprimir el mensaje en la consola (para main.py)
-                            print(line)
-
+                            print(line)  # Opcional: imprime todos los mensajes (para depuración)
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
             self.close()
