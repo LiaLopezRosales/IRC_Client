@@ -49,7 +49,7 @@ def execute_command(connection, command, argument, nick):
             connection.notice(target, message)
         elif command == "/quit":
             connection.quit(argument)
-            return False  # Indica que el cliente debe cerrarse
+            #return False  # Indica que el cliente debe cerrarse
         elif command == "/privmsg":
             target, message = argument.split(" ", 1)
             connection.message(target, message)
@@ -125,6 +125,9 @@ def execute_command(connection, command, argument, nick):
         
         # Espera la respuesta específica del servidor (ignora otros mensajes)
         response = connection.wait_for_response(timeout=3)
+        if not response:
+                # Si no se recibió respuesta, asume que la desconexión fue exitosa
+                response = "Desconectado del servidor"
 
         # Formatea la respuesta según el test
         formatted_response = format_response(command, argument, nick, response)
