@@ -23,6 +23,7 @@ class ClientConnection:
         self.port = port
         self.socket = None
         self.ssl_socket = None
+        self.is_connected = False
 
     def connect_client(self,password,nick,real_name):
         """
@@ -44,6 +45,7 @@ class ClientConnection:
             self.pass_command(password)  # Cambia "your_password" según tu configuración
             self.nick(nick)              # Cambia "YourNick" por tu apodo deseado
             self.set_user(nick, real_name)  # Cambia "YourRealName" según sea necesario
+            self.is_connected=True
             # print("Registro completado.")
             # print(f"Conexión segura establecida con {self.host}:{self.port}")
         
@@ -72,7 +74,7 @@ class ClientConnection:
                                                 Si es None, los mensajes se imprimen en la consola.
         """
         try:
-            while True:
+            while self.is_connected:
                 # Leer datos del servidor
                 data = self.ssl_socket.recv(4096).decode('utf-8').strip()
                 if not data:
@@ -98,6 +100,7 @@ class ClientConnection:
 
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
+            self.close()
 
     def join_channel(self, channel):
         """
@@ -203,19 +206,17 @@ class ClientConnection:
         print(f"[CLIENTE] PONG enviado al servidor: {server_name}")
 
     def close(self):
-        """
-        Cierra la conexión al servidor.
-        """
-        try:
-            if self.ssl_socket:
-                # Realizar un cierre TLS limpio
-                self.ssl_socket.shutdown(socket.SHUT_RDWR)
-                self.ssl_socket.close()
-                
-            print("Conexión cerrada.")
-        
-        except Exception as e:
-            print(f"Error al cerrar la conexión: {e}")
+        if self.is_connected:
+            try:
+                self.is_connected = False
+                if self.ssl_socket:
+                    try:
+                        self.ssl_socket.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass  # El socket ya estaba cerrado
+                    self.ssl_socket.close()
+            except Exception as e:
+                print(f"Error al cerrar: {e}")
 
 
 
