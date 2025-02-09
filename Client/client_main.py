@@ -33,10 +33,10 @@ def execute_command(connection, command, argument, nick):
     }
 
     try:
-        # if command in response_patterns:
-        #     connection.set_expected_response(response_patterns[command])
-        # else:
-        #     connection.set_expected_response(None)
+        if command in response_patterns:
+            connection.set_expected_response(response_patterns[command])
+        else:
+            connection.set_expected_response(None)
             
         if command == "/nick":
             connection.nick(argument)
@@ -130,9 +130,8 @@ def execute_command(connection, command, argument, nick):
                 response = "Desconectado del servidor"
 
         # Formatea la respuesta según el test
-        # formatted_response = format_response(command, argument, nick, response)
-        # print(formatted_response if formatted_response else "Sin respuesta del servidor")
-        print(response)
+        formatted_response = format_response(command, argument, nick, response)
+        print(formatted_response if formatted_response else "Sin respuesta del servidor")
 
         return True
 

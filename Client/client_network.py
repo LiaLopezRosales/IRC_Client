@@ -37,7 +37,7 @@ class ClientConnection:
     def wait_for_response(self, timeout=5):
         """Espera hasta recibir una respuesta que coincida con el patrón."""
         if self.response_received.wait(timeout=timeout):
-            return self.response_received
+            return self.last_matching_response
         return None
 
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
@@ -102,8 +102,8 @@ class ClientConnection:
                             self.response_received.set()  # Notifica que llegó la respuesta
                         if message_queue:
                             message_queue.put(line)
-                        # else:
-                        #     print(line)  # Opcional: imprime todos los mensajes (para depuración)
+                        else:
+                            print(line)  # Opcional: imprime todos los mensajes (para depuración)
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
             self.close()
