@@ -2,6 +2,7 @@ import threading
 from client_network import ClientConnection
 from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT
 from Common.custom_errors import IRCConnectionError
+import time
 
 def start_receiver_thread(connection):
     """
@@ -21,6 +22,7 @@ def execute_command(connection, command, argument):
     """
     Ejecuta un comando específico en la conexión IRC.
     """
+    print(f"{command}, {argument}")
     try:
         if command == "/nick":
             connection.nick(argument)
@@ -149,23 +151,15 @@ def run_interactive_mode(connection):
             print(f"Error inesperado: {e}")
 
 def run_single_command_mode(host, port, nick, command, argument):
-    """
-    Modo de un solo comando para uso con testers.
-    """
     try:
         connection = ClientConnection(host, port)
-        connection.connect_client("pass", "user", nick)  # Inicia la conexión
-
-        # Iniciar el hilo de recepción
+        connection.connect_client("pass", "user", nick)
         start_receiver_thread(connection)
-
-        # Ejecutar el comando especificado
         if not execute_command(connection, command, argument):
-            return  # Salir si el comando es /quit o hay un error grave
-
-        # Cerrar la conexión
+            return
+        # Esperar 1 segundo para recibir respuestas
+        time.sleep(5)
         connection.quit("Goodbye!")
-
     except IRCConnectionError as e:
         print(f"Error de conexión: {e}")
     except Exception as e:

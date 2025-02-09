@@ -25,32 +25,21 @@ class ClientConnection:
         self.ssl_socket = None
         self.is_connected = False
 
-    def connect_client(self,password,nick,real_name):
-        """
-        Establece una conexión al servidor utilizando SSL.
-        """
-        try:
-            # Crear un socket TCP/IP
-            self.ssl_socket = socket.create_connection((self.host, self.port))
-
-            # Crear un contexto SSL
-            #context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-
-            # Aquí se carga el certificado del servidor si es necesario (no es obligatorio para el cliente)
-            #context.load_verify_locations(cafile="server.crt")
-
-            # Envolver el socket en un contexto SSL
-            #self.ssl_socket = context.wrap_socket(self.socket, server_hostname=self.host)
-            # Enviar comandos de registro (PASS, NICK, USER)
-            self.pass_command(password)  # Cambia "your_password" según tu configuración
-            self.nick(nick)              # Cambia "YourNick" por tu apodo deseado
-            self.set_user(nick, real_name)  # Cambia "YourRealName" según sea necesario
-            self.is_connected=True
-            # print("Registro completado.")
-            # print(f"Conexión segura establecida con {self.host}:{self.port}")
-        
-        except Exception as e:
-            raise IRCConnectionError(f"Error al conectar: {e}")
+    def connect_client(self,password,nick,real_name, retries=3, delay=2):
+        for attempt in range(retries):
+            try:
+                self.socket = socket.create_connection((self.host, self.port))
+                self.pass_command(password)
+                self.nick(nick)
+                self.set_user(nick, real_name)
+                self.is_connected = True
+                return
+            except Exception as e:
+                if attempt < retries - 1:
+                    print(f"Reintentando conexión ({attempt + 1}/{retries})...")
+                    time.sleep(delay)
+                else:
+                    raise IRCConnectionError(f"Error al conectar después de {retries} intentos: {e}")
 
     def send(self, command, params=None, trailing=None):
         """
