@@ -33,10 +33,10 @@ def execute_command(connection, command, argument, nick):
     }
 
     try:
-        if command in response_patterns:
-            connection.set_expected_response(response_patterns[command])
-        else:
-            connection.set_expected_response(None)
+        # if command in response_patterns:
+        #     connection.set_expected_response(response_patterns[command])
+        # else:
+        #     connection.set_expected_response(None)
             
         if command == "/nick":
             connection.nick(argument)
@@ -130,8 +130,9 @@ def execute_command(connection, command, argument, nick):
                 response = "Desconectado del servidor"
 
         # Formatea la respuesta según el test
-        formatted_response = format_response(command, argument, nick, response)
-        print(formatted_response if formatted_response else "Sin respuesta del servidor")
+        # formatted_response = format_response(command, argument, nick, response)
+        # print(formatted_response if formatted_response else "Sin respuesta del servidor")
+        print(response)
 
         return True
 
@@ -163,8 +164,14 @@ def run_interactive_mode(connection, nick):
                 continue
 
             # Manejar el comando 'quit' para salir
-            if user_input.lower() == "quit":
-                connection.quit("Saliendo del cliente IRC")
+            if user_input.lower() == "quit" or user_input.startswith("/quit"):
+                parts = user_input.split(" ", 1)  # Dividir en máximo 2 partes
+                command = parts[0]  # Siempre será "/quit" o "quit"
+                argument = parts[1] if len(parts) > 1 else ""  # Argumento vacío si no hay
+                connection.quit(argument)
+                print(f"Desconectado del servidor")
+                # if not execute_command(connection, command, argument, nick):
+                #     break  # Salir si el comando es /quit o hay un error grave
                 break
 
             # Dividir el comando y el argumento
@@ -191,7 +198,7 @@ def run_single_command_mode(host, port, nick, command, argument):
         if not execute_command(connection, command, argument, nick):
             return
         # Esperar 1 segundo para recibir respuestas
-        time.sleep(5)
+        time.sleep(1)
         connection.quit("Goodbye!")
     except IRCConnectionError as e:
         print(f"Error de conexión: {e}")

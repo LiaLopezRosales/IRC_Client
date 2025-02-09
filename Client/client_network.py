@@ -102,8 +102,8 @@ class ClientConnection:
                             self.response_received.set()  # Notifica que llegó la respuesta
                         if message_queue:
                             message_queue.put(line)
-                        else:
-                            print(line)  # Opcional: imprime todos los mensajes (para depuración)
+                        # else:
+                        #     print(line)  # Opcional: imprime todos los mensajes (para depuración)
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
             self.close()
