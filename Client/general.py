@@ -6,6 +6,7 @@ from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT
 import threading
 from Common.custom_errors import ProtocolError
 import queue
+from Common.irc_protocol import parse_message
 
 
 class MainView(tk.Tk):
@@ -29,7 +30,8 @@ class MainView(tk.Tk):
         self.server_messages = queue.Queue()  # Cola para mensajes del servidor
 
         # Variables de estado
-        self.active_target = tk.StringVar(value="Ninguno seleccionado")
+        self.active_target = tk.StringVar(value="Servidor")
+        # self.active_target.set("Servidor")
         self.active_target_type = -1
         self.connected = tk.StringVar(value="Desconectado")
         self.is_authenticated = False  # Usuario autenticado
@@ -41,6 +43,12 @@ class MainView(tk.Tk):
         # Flujo de mensajes
         self.message_history = {}  # Diccionario para almacenar mensajes
         self.new_message_indicators = {}  # Para marcar nuevos mensajes
+
+        # Diccionario para canales: {channel_name: {"topic": str}}
+        self.channels = {"Servidor": {"topic": "Mensajes del servidor"}}  # Canal predeterminado
+
+        # Conjunto para usuarios únicos en el servidor
+        self.all_users = set()
 
         # Colores personalizables
         self.colors = {
@@ -76,63 +84,6 @@ class MainView(tk.Tk):
 
         thread = threading.Thread(target=listen, daemon=True)
         thread.start()
-        
-    def process_server_messages(self):
-        """Procesa los mensajes del servidor desde la cola."""
-        while not self.server_messages.empty():
-            try:
-                message = self.server_messages.get()
-                prefix, command, params, trailing = message
-                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
-
-                # Almacenar mensajes en el historial
-                if command in ["PRIVMSG", "NOTICE"]:  # Ejemplo de comandos
-                    target = params[0]  # Canal o usuario
-                    message = trailing
-                    sender = prefix.split('!')[0]  # Obtener el remitente
-
-                    # Actualizar el historial de mensajes
-                    if target not in self.message_history:
-                        self.message_history[target] = []
-                    self.message_history[target].append((sender, message))  # Guardar remitente y mensaje
-
-                    # Señalizar que hay nuevos mensajes
-                    self.new_message_indicators[target] = True
-
-                # Manejo de mensajes del servidor
-                else:
-                    self.store_server_message(message)
-
-                # Actualizar la lista de canales y usuarios solo una vez
-                self.update_channel_user_list()
-
-            except ValueError:
-                print(f"Error: Formato inesperado del mensaje: {message}")
-                self.display_message(f"Mensaje inesperado: {message}")
-
-            except Exception as e:
-                print(f"Error procesando mensaje: {e}")
-        
-        # Llama a este método nuevamente después de 100 ms
-        self.after(100, self.process_server_messages)
-        
-    # def process_server_messages(self):
-    #     """Procesa los mensajes del servidor desde la cola."""
-    #     while not self.server_messages.empty():
-    #         try:
-    #             response = self.server_messages.get()
-    #             prefix, command, params, trailing = response
-    #             display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
-    #             self.display_message(display_text)
-    #         except ValueError:
-    #             print(f"Error: Formato inesperado del mensaje: {response}")
-    #             self.display_message(f"Mensaje inesperado: {response}")
-    #         except Exception as e:
-    #             print(f"Error procesando mensaje: {e}")
-        
-    #     # Llama a este método nuevamente después de 100 ms
-    #     self.after(100, self.process_server_messages)
-
 
     def create_status_bar(self):
         """Cinta superior con estado de conexión."""
@@ -211,32 +162,6 @@ class MainView(tk.Tk):
 
         self.channel_list.config(selectbackground="#4caf50", activestyle="dotbox", height=15)
         self.user_list.config(selectbackground="#4caf50", activestyle="dotbox", height=15)
-
-
-        # Agregar algunos elementos de ejemplo
-        for channel in ["#general", "#python", "#random"]:
-            self.channel_list.insert("end", channel)
-
-        for user in ["lia", "Bob", "Charlie"]:
-            self.user_list.insert("end", user)
-
-    def update_channel_user_list(self):
-        """Actualiza la lista de canales y usuarios en la interfaz gráfica sin modificar la estructura visual."""
-        self.channel_list.delete(0, tk.END)  # Limpiar la lista actual
-
-        for channel in self.message_history.keys():
-            display_name = channel
-            if self.new_message_indicators.get(channel, False):
-                display_name += "    *"  # Agregar asterisco si hay nuevos mensajes
-            self.channel_list.insert(tk.END, display_name)  # Agregar a la lista
-
-        # Similar para la lista de usuarios
-        self.user_list.delete(0, tk.END)  # Limpiar la lista actual
-        for user in self.user_list_data:  # Suponiendo que tienes una lista de usuarios
-            display_name = user
-            if self.new_message_indicators.get(user, False):
-                display_name += "    *"  # Agregar asterisco si hay nuevos mensajes
-            self.user_list.insert(tk.END, display_name)  # Agregar a la lista
 
     def create_chat_area(self):
         """Área de chat principal con ajustes de tamaño y diseño."""
@@ -357,11 +282,12 @@ class MainView(tk.Tk):
         # Demás botones del menú
         menu_buttons = [
             ("Ingresar otro cmd", self.other_cmd),
+            ("Crear Canal", self.create_channel),
             ("Cambiar Nick", self.change_nick_action),
             ("Conectar Servidor", self.connect_another_server_action),
             ("Info Servidor", self.server_info_action),
-            ("Lista Servidores", self.server_list_action),
-            ("Salir", self.close)
+            ("Lista Servidores", self.server_links_action),
+            ("Salir", self.close),
         ]
 
         for text, command in menu_buttons:
@@ -404,8 +330,8 @@ class MainView(tk.Tk):
     def open_context_menu(self):
         """Despliega un menú con opciones para canales o usuarios."""
         target = self.active_target.get()
-        if target == "Ninguno seleccionado":
-            messagebox.showerror("Error", "Debes seleccionar un canal o usuario primero.")
+        if target == "Servidor":
+            # messagebox.showerror("Error", "Debes seleccionar un canal o usuario primero.")
             return
 
         # Menú emergente
@@ -413,7 +339,8 @@ class MainView(tk.Tk):
         context_menu.title(f"Opciones para {target}")
         context_menu.geometry("300x300")
 
-        tk.Label(context_menu, text=f"Opciones para {target}").pack(pady=10)
+        if target != "Servidor":
+            tk.Label(context_menu, text=f"Opciones para {target}").pack(pady=10)
 
         if self.active_target_type == 0:
             self.channel_topic = tk.Label(
@@ -520,14 +447,14 @@ class MainView(tk.Tk):
             self.after(100, self.update_server_info)
 
 
-    def server_list_action(self):
+    def server_links_action(self):
         """Solicita y muestra la lista de servidores conectados al IRC."""
         if not self.connection:
             messagebox.showerror("Error", "No estás conectado al servidor.")
             return
 
         # Crear una cola para almacenar los datos del servidor
-        self.server_list_queue = queue.Queue()
+        self.server_links_queue = queue.Queue()
 
         def request_links():
             """Hilo para solicitar y procesar la lista de servidores."""
@@ -537,17 +464,23 @@ class MainView(tk.Tk):
 
                 while True:
                     for response in self.connection.receive():
-                        if isinstance(response, tuple) and response[1] == "364":  # Código 364 para LINKS
-                            server_name = response[2][0]  # Nombre del servidor
-                            description = response[3]  # Trailing contiene la descripción
-                            self.server_list_queue.put(f"{server_name} - {description}")
-                        elif isinstance(response, tuple) and response[1] == "365":  # Fin de la lista de LINKS
+                        prefix, command, params, trailing = parse_message(response)
+
+                        if command == "364":
+                            server_name = prefix
+                            description = trailing
+                        # if isinstance(response, tuple) and response[1] == "364":  # Código 364 para LINKS
+                        #     server_name = response[2][0]  # Nombre del servidor
+                        #     description = response[3]  # Trailing contiene la descripción
+                            self.server_links_queue.put(f"{server_name} - {description}")
+                        elif command == "365":
+                        # elif isinstance(response, tuple) and response[1] == "365":  # Fin de la lista de LINKS
                             break
             except Exception as e:
-                self.server_list_queue.put(f"Error: {e}")
+                self.server_links_queue.put(f"Error: {e}")
             finally:
                 # Marca el final de los datos en la cola
-                self.server_list_queue.put(None)
+                self.server_links_queue.put(None)
 
         # Crear un hilo para la solicitud y el procesamiento
         thread = threading.Thread(target=request_links, daemon=True)
@@ -569,27 +502,27 @@ class MainView(tk.Tk):
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
 
-        self.server_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+        self.server_linksbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
                                         bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
-        self.server_listbox.pack(side="left", fill="both", expand=True)
-        scrollbar.config(command=self.server_listbox.yview)
+        self.server_linksbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.server_linksbox.yview)
 
         # Actualizar la lista de servidores periódicamente
-        self.update_server_list()
+        self.update_server_links()
 
-    def update_server_list(self):
+    def update_server_links(self):
         """Actualiza la lista de servidores desde la cola."""
         try:
-            while not self.server_list_queue.empty():
-                server = self.server_list_queue.get()
+            while not self.server_links_queue.empty():
+                server = self.server_links_queue.get()
                 if server is None:  # Fin de los datos
                     return
-                self.server_listbox.insert(tk.END, server)
+                self.server_linksbox.insert(tk.END, server)
         except Exception as e:
             print(f"Error actualizando lista de servidores: {e}")
         finally:
             # Vuelve a llamar a esta función después de 100 ms
-            self.after(100, self.update_server_list)
+            self.after(100, self.update_server_links)
 
     def close(self):
         self.disconnect_action
@@ -607,7 +540,11 @@ class MainView(tk.Tk):
         if not message.strip():
             messagebox.showwarning("Mensaje vacío", "No puedes enviar un mensaje vacío.")
             return
-
+        
+        if target == "Servidor":
+            messagebox.showwarning("mensaje a servidor", "No se le pueden pasar mensajes directos al servidor")
+            return
+        
         def send():
             try:
                 if "Canal:" in target:
@@ -664,7 +601,11 @@ class MainView(tk.Tk):
             try:
                 int(port)  # Verificar si es numérico
                 self.connection = ClientConnection(server, port)
+
+                # Registrar el cliente
                 self.connection.connect_client(self.password, self.nick, self.username)
+                
+                # Conectar y procesar mensajes
                 self.is_connected = True
                 self.start_receiving()
                 self.process_server_messages()  # Iniciar el procesamiento de mensajes
@@ -672,12 +613,13 @@ class MainView(tk.Tk):
                 self.update_buttons()
                 messagebox.showinfo("Conectado", f"Conectando a {server}:{port}...")
                 connect_window.destroy()
+
             except ValueError:
                 messagebox.showerror("Error", "El puerto debe ser un número.")
 
         connect_button = tk.Button(connect_window, text="Conectar", command=attempt_connection)
         connect_button.pack(pady=10)
-
+        
     def connect_another_server_action(self):
         """Solicitar servidor y puerto para enlazar otro servidor mediante el comando CONNECT."""
         if not self.is_connected:
@@ -734,17 +676,29 @@ class MainView(tk.Tk):
         """Desconectarse y actualizar el estado."""
         if self.connection:
             try:
+                self.is_connected = False  # Detener hilos de recepción
                 self.connection.quit("Desconexión")
             except Exception as e:
-                print(f"Error al desconectar: {e}")
+                print(f"Error al enviar QUIT: {e}")
             finally:
-                self.connection = None
-                self.is_connected = False
+                try:
+                    self.connection.close()  # Cerrar socket
+                except Exception as e:
+                    print(f"Error al cerrar conexión: {e}")
+                self.connection = None  # Eliminar referencia
+                
+                # Limpiar UI y datos
+                self.message_history.clear()
+                self.channels = {"Servidor": {"topic": "Mensajes del servidor"}}
+                self.all_users.clear()
+                self.channel_list.delete(0, tk.END)
+                self.user_list.delete(0, tk.END)
                 self.update_connection_status(False)
+                self.update_buttons()
                 messagebox.showinfo("Desconectado", "Conexión cerrada.")
         else:
             messagebox.showwarning("Desconexión", "No estás conectado a ningún servidor.")
-
+    
     def logout_action(self):
         """Cerrar sesión y reiniciar los datos."""
         if messagebox.askyesno("Cerrar sesión", "¿Seguro que quieres cerrar sesión?"):
@@ -821,13 +775,21 @@ class MainView(tk.Tk):
                 selected_user = self.user_list.get(selection[0])
                 self.active_target.set(f"Usuario: {selected_user}")
                 self.active_target_type = 1
+        else:
+            self.active_target.set("Servidor")
+            self.active_target_type = -1
 
         # Limpiar el historial de chat actual
         self.chat_history.config(state="normal")
         self.chat_history.delete(1.0, tk.END)
+        
+        # Limpiar indicador de nuevos mensajes
+        target = self.active_target.get().replace(" *", "")
+        if target in self.new_message_indicators:
+            self.new_message_indicators[target] = False
+            self.update_list_item(target, False)
 
         # Mostrar mensajes del historial para el canal/usuario seleccionado
-        target = self.active_target
         if target in self.message_history:
             for sender, message in self.message_history[target]:
                 self.display_message(message, sender)
@@ -909,6 +871,7 @@ class MainView(tk.Tk):
             try:
                 self.connection.change_topic(channel, topic)  # Enviar el comando TOPIC al servidor
                 self.channel_topic.config(text=f"{topic}")  # Actualizar la interfaz gráfica
+                self.channels[channel] = {"topic": topic}
                 messagebox.showinfo("Éxito", f"El tema del canal {channel} ha sido actualizado.")
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo cambiar el tema: {e}")
@@ -1104,12 +1067,12 @@ class MainView(tk.Tk):
 
     def get_topic(self):
         target = self.active_target.get()
-        return "En espera"
+        return self.channels[target]
 
     def get_user_info(self):
         """Se obtiene toda la información del usuario con el que se está hablando. Comando whois"""
         user = self.active_target
-        return " "
+        return self.whois_user(user)
 
     def other_cmd(self):
         """
@@ -1133,6 +1096,10 @@ class MainView(tk.Tk):
 
             if not command:
                 messagebox.showerror("Error", "El comando no puede estar vacío.")
+                return
+
+            if command in ["USER", "PASS", "NICK", "VERSION", "QUIT", "KICK", "JOIN", "PART", "MODE", "TOPIC", "NAMES", "LIST", "INVITE", "PRIVSMG", "WHO", "WHOIS"]:
+                messagebox.showwarning("Inválido", f"El comando {command}, no está siendo procesado por esta vía")
                 return
 
             def send_command():
@@ -1164,21 +1131,51 @@ class MainView(tk.Tk):
         def show_cmd_list():
             """Muestra una lista de comandos ejecutables con su estructura."""
             command_list = [
-                "PASS <password>", "USER <username> <hostname> <servername> <realname>",
-                "NICK <nickname>", "OPER <name> <password>", "QUIT [<message>]",
-                "SQUIT <server> [<message>]", "SERVICE <name> <reserved> <distribution> <type> <reserved> <info>",
-                "JOIN <channel>{,<channel>}", "PART <channel>{,<channel>} [<message>]",
-                "MODE <target> <flags> [<parameters>]", "TOPIC <channel> [<new_topic>]",
-                "NAMES [<channel>{,<channel>}]", "LIST [<channel>{,<channel>}]", "INVITE <nickname> <channel>",
-                "KICK <channel> <user> [<message>]", "MOTD", "LUSERS", "VERSION", "STATS",
-                "LINKS", "TIME", "CONNECT <target_server> <port>", "SERVLIST [<mask>]",
-                "SQUERY <service_name> <text>", "TRACE", "ADMIN", "INFO",
-                "PRIVMSG <target> <message>", "NOTICE <target> <message>", "WHO [<mask>]",
-                "WHOIS <nickname>{,<nickname>}", "WHOWAS <nickname>{,<nickname>}",
-                "PING <server>", "PONG <server>", "AWAY [<message>]", "REHASH",
-                "DIE", "RESTART", "ERROR <message>", "KILL <nickname> <message>",
-                "SUMMON <nickname> [<server>]", "USERS [<server>]", "WALLOPS <message>",
-                "USERHOST <nickname>{<nickname>}", "ISON <nickname>{<nickname>}"
+                # "PASS <password>", 
+                # "USER <username> <hostname> <servername> <realname>",
+                # "NICK <nickname>", 
+                "OPER <name> <password>", 
+                # "QUIT [<message>]",
+                "SQUIT <server> [<message>]", 
+                "SERVICE <name> <reserved> <distribution> <type> <reserved> <info>",
+                # "JOIN <channel>{,<channel>}", 
+                # "PART <channel>{,<channel>} [<message>]",
+                # "MODE <target> <flags> [<parameters>]", 
+                # "TOPIC <channel> [<new_topic>]",
+                # "NAMES [<channel>{,<channel>}]", 
+                # "LIST [<channel>{,<channel>}]", 
+                # "INVITE <nickname> <channel>",
+                # "KICK <channel> <user> [<message>]", 
+                "MOTD", 
+                "LUSERS", 
+                # "VERSION", 
+                "STATS",
+                # "LINKS", 
+                "TIME", 
+                "CONNECT <target_server> <port>", 
+                "SERVLIST [<mask>]",
+                "SQUERY <service_name> <text>", 
+                "TRACE", 
+                "ADMIN", 
+                "INFO",
+                # "PRIVMSG <target> <message>", 
+                "NOTICE <target> <message>", 
+                # "WHO [<mask>]",
+                # "WHOIS <nickname>{,<nickname>}", 
+                "WHOWAS <nickname>{,<nickname>}",
+                "PING <server>", 
+                "PONG <server>", 
+                "AWAY [<message>]", 
+                "REHASH",
+                "DIE", 
+                "RESTART", 
+                "ERROR <message>", 
+                "KILL <nickname> <message>",
+                "SUMMON <nickname> [<server>]", 
+                "USERS [<server>]", 
+                "WALLOPS <message>",
+                "USERHOST <nickname>{<nickname>}", 
+                "ISON <nickname>{<nickname>}"
             ]
             cmd_list_window = tk.Toplevel(command_window)
             cmd_list_window.title("Comandos ejecutables")
@@ -1205,10 +1202,218 @@ class MainView(tk.Tk):
         self.active_target = tk.StringVar(value="Ninguno seleccionado")
         
 
+    def signal_new_message(self, target):
+        """Señaliza que hay nuevos mensajes en el canal/usuario/servidor."""
+        if target not in self.new_message_indicators:
+            self.new_message_indicators[target] = True
+
+        # Actualizar solo el elemento específico en la lista
+        if target == "servidor":
+            self.update_list_item("Servidor", self.new_message_indicators["servidor"])
+        else:
+            self.update_list_item(target, self.new_message_indicators[target])
+
+    def update_list_item(self, item, has_new_message):
+        """Actualiza un elemento específico en la lista de canales o usuarios."""
+        # Buscar el elemento en la lista de canales
+        for i in range(self.channel_list.size()):
+            if self.channel_list.get(i).replace(" *", "") == item:
+                display_name = item
+                if has_new_message:
+                    display_name += " *"
+                self.channel_list.delete(i)
+                self.channel_list.insert(i, display_name)
+                return
+
+        # Buscar el elemento en la lista de usuarios
+        for i in range(self.user_list.size()):
+            if self.user_list.get(i).replace(" *", "") == item:
+                display_name = item
+                if has_new_message:
+                    display_name += " *"
+                self.user_list.delete(i)
+                self.user_list.insert(i, display_name)
+                return     
+
+    def request_channel_list(self):
+        """Solicita la lista de canales (comando LIST)."""
+        def execute_list():
+            try:
+                self.connection.list()
+                threading.Thread(target=self.process_list_responses, daemon=True).start()
+            except Exception as e:
+                print(f"Error al solicitar lista de canales: {e}")
+        threading.Thread(target=execute_list, daemon=True).start()
+ 
+    def process_list_responses(self):
+        """Procesa respuestas del comando LIST."""
+        while True:
+            try:                
+                raw_response = self.server_messages.get(timeout=1)
+                prefix, command, params, trailing = parse_message(raw_response)
+            
+                if command == "322":  # LIST
+                    channel = params[1] if len(params) > 1 else params[0]
+                    topic = trailing if trailing else "Sin tema"
+                    self.channels[channel] = {"topic": topic}   
+                elif command == "323":  # Fin de LIST
+                    break
+
+            except queue.Empty:
+                continue
+
+    def request_user_list(self):
+        """Solicita la lista global de usuarios (comando WHO)."""
+        def execute_who():
+            try:
+                self.connection.who("*")
+                threading.Thread(target=self.process_who_responses, daemon=True).start()
+            except Exception as e:
+                print(f"Error al solicitar usuarios: {e}")
+        threading.Thread(target=execute_who, daemon=True).start()
+
+    def process_who_responses(self):
+        """Procesa respuestas del comando WHO."""
+        while True:
+            try:
+                raw_response = self.server_messages.get(timeout=1)
+                prefix, command, params, trailing = parse_message(raw_response)
+            
+                if command == "352":  # WHO
+                    user = params[5]  # Nombre de usuario
+                    self.all_users.add(user)
+                elif command == "315":  # Fin de WHO
+                    break
+            except queue.Empty:
+                continue
+
+    def whois_user(self, nick):
+        """Solicita información detallada de un usuario."""
+        info = ""
+        def execute_whois():
+            try:
+                self.connection.whois(nick)
+                while True:
+                    try:
+                        response = self.server_messages.get(timeout=1)
+                        prefix, command, params, trailing = response
+                        if command == "311":  # WHOIS
+                            nickname = params[1]
+                            realname = trailing
+                            info = f"{nickname}: {realname}"
+                        elif command == "318":  # Fin de WHOIS
+                            break
+                    except queue.Empty:
+                        continue
+            except Exception as e:
+                print(f"Error al solicitar WHOIS: {e}")
+        threading.Thread(target=execute_whois, daemon=True).start()
+        return info
+
+
+
+    def start_auto_updates(self):
+        """Inicia la carga inicial y actualizaciones periódicas de canales/usuarios."""
+        if self.is_connected and self.nick:  # Esperar hasta tener nick
+            threading.Thread(target=self.request_channel_list, daemon=True).start()
+            threading.Thread(target=self.request_user_list, daemon=True).start()
+
+            self.channel_list.delete(0, tk.END)
+            self.user_list.delete(0, tk.END)
+
+            # Agregar elementos de las listas
+            for channel, topic in self.channels.items():
+                self.channel_list.insert(tk.END, channel)
+
+            for user in self.all_users:
+                self.user_list.insert(tk.END, user)
+
+
+        self.after(60000, self.start_auto_updates)
+
+    def process_server_messages(self):
+        """Procesa los mensajes del servidor desde la cola."""
+        handled_commands = {
+            "PRIVMSG", "NOTICE",  # Manejados en display_message
+            # "001", "002", "003", "004", "005",  # Comandos de registro
+            # "251", "252", "253", "254", "255", "265", "266",  # Estadísticas
+            # "375", "372", "376",  # MOTD
+            "322", "323", "315", "352", "311", "318", "364", "365", "351"  # Listas
+        }
+
+        while not self.server_messages.empty():
+            try:
+                raw_message = self.server_messages.get()
+                
+                prefix, command, params, trailing = parse_message(raw_message)
+                display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
+
+                # Comando de inicio del servidor
+                if command == "001":  # Registro exitoso
+                    self.nick = params[0]
+                    self.username_label.config(text=self.nick)
+                    self.start_auto_updates()  # Iniciar carga de listas
+                    
+                # Comandos PRIVMSG/NOTICE (manejo especial)
+                if command in ["PRIVMSG", "NOTICE"]:
+                    if not params:
+                        continue
+                    target = params[0]
+                    sender = prefix.split('!')[0] if '!' in prefix else "Servidor"
+                    
+                    # Actualizar historial y notificaciones
+                    if target not in self.message_history:
+                        self.message_history[target] = []
+                    self.message_history[target].append((sender, trailing))
+                    self.new_message_indicators[target] = True
+
+                    # Actualizar UI si es el target activo
+                    if target == self.active_target.get():
+                        self.display_message(trailing, sender)
+                    else:
+                        self.signal_new_message(target)
+
+                # Todos los demás comandos van al historial del servidor
+                elif command not in handled_commands:
+                    if "Servidor" not in self.message_history:
+                        self.message_history["Servidor"] = []
+                    self.message_history["Servidor"].append(("Servidor", display_text))
+                    self.new_message_indicators["Servidor"] = True
+
+                    if self.active_target.get() == "Servidor":
+                        self.display_message(display_text, "Servidor")
+                    else:
+                        self.signal_new_message("Servidor")
+
+            except IndexError as e:
+                print(f"Error de índice en mensaje: {raw_message}")
+            except Exception as e:
+                print(f"Error crítico procesando mensaje: {str(e)}")
+                import traceback
+                traceback.print_exc()
+
+        self.after(100, self.process_server_messages)
+
+    def create_channel(self):
+        channel = simpledialog.askstring("Crear Canal", "Nombre del canal (ej. #general):")
+        if channel:
+            if not channel.startswith("#"):
+                channel = f"#{channel}"  
+            
+            if len(channel) > 64:
+                messagebox.showerror("Error", "Nombre inválido. Debe tener ≤64 caracteres.")
+                return
+            
+            threading.Thread(target=self.connection.join_channel, args=(channel,), daemon=True).start()
+
+            self.channels[channel] = {"topic": "vacío"}
+            self.channel_list.insert(tk.END, channel)
+
+
+
 
 # Prueba independiente de la vista principal
 if __name__ == "__main__":
     app = MainView()
     app.mainloop()
-
 
