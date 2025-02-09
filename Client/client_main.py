@@ -169,7 +169,7 @@ def run_interactive_mode(connection, nick):
                 command = parts[0]  # Siempre será "/quit" o "quit"
                 argument = parts[1] if len(parts) > 1 else ""  # Argumento vacío si no hay
                 connection.quit(argument)
-                print(f"Desconectado del servidor")
+                #print(f"Desconectado del servidor")
                 # if not execute_command(connection, command, argument, nick):
                 #     break  # Salir si el comando es /quit o hay un error grave
                 break
