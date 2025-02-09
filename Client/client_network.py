@@ -37,7 +37,7 @@ class ClientConnection:
     def wait_for_response(self, timeout=5):
         """Espera hasta recibir una respuesta que coincida con el patrón."""
         if self.response_received.wait(timeout=timeout):
-            return self.last_matching_response
+            return self.response_received
         return None
 
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
