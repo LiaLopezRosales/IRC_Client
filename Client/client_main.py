@@ -23,20 +23,20 @@ def execute_command(connection, command, argument, nick):
     Ejecuta un comando específico en la conexión IRC.
     """
     response_patterns = {
-    "/nick": f":.* NICK {argument}",
-    "/join": f":.* JOIN {argument}",
-    "/part": f":.* PART {argument}",
+    "/nick": f":.* NICK :{argument}",
+    "/join": f":.* JOIN :{argument}",
+    "/part": f":.* PART :{argument}",
     "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0]}",
     "/notice": f":{nick}!.* NOTICE {argument.split()[0]}",
     "/quit": "ERROR :Closing link",
     "/mode": r" MODE ",
     "/topic": r" TOPIC ",
-    "/names": r" 353 ",
-    "/list": r" 322 ",
+    "/names": (r' 353 ', r' 366 '),
+    "/list": (r' 322 ', r' 323 '),
     "/invite": r" INVITE ",
     "/kick": r" KICK ",
-    "/who": r" 352 ",
-    "/whois": r" 311 ",
+    "/who": (r' 352 ', r' 315 '),
+    "/whois": (r' 311 ', r' 318 '),
     "/whowas": r" 314 ",
     "/oper": r" 381 ",
     "/kill": r" KILL ",
@@ -58,11 +58,22 @@ def execute_command(connection, command, argument, nick):
     "/restart": r" RESTART ",
     "/userhost": r" 302 ",
     "/ison": r" 303 ",
+    "ERROR": {
+        "403": "No existe el canal",
+        "482": "No tienes permiso para realizar esta acción",
+        "481": "Necesitas privilegios de operador",
+        "431": "Falta nickname",
+        "433": "Nickname ya está en uso",
+        "476": "Nombre de canal inválido"
+    }
 }
 
 
     try:
-        if command in response_patterns:
+        if command in ["/list", "/names", "/who", "/whois"]:
+            pattern, terminator = response_patterns[command]
+            connection.set_expected_response(pattern, terminator)
+        elif command in response_patterns:
             connection.set_expected_response(response_patterns[command])
         else:
             connection.set_expected_response(None)
@@ -153,14 +164,22 @@ def execute_command(connection, command, argument, nick):
             return True  # Continúa en modo interactivo
         
         # Espera la respuesta específica del servidor (ignora otros mensajes)
-        response = connection.wait_for_response(timeout=3)
-        if not response:
+        response = connection.wait_for_response(timeout=4)
+        if not response and command=="/quit":
                 # Si no se recibió respuesta, asume que la desconexión fue exitosa
                 response = "Desconectado del servidor"
 
         # Formatea la respuesta según el test
         formatted_response = format_response(command, argument, nick, response)
-        print(formatted_response if formatted_response else "Sin respuesta del servidor")
+        # print(formatted_response if formatted_response else "Sin respuesta del servidor")
+        if format_response:
+            if isinstance(formatted_response, list):
+                for msg in formatted_response:
+                    print(msg)
+            else:
+                print(formatted_response)
+        else:
+            print(f"Sin respuesta del servidor")
 
         return True
 
@@ -171,6 +190,115 @@ def execute_command(connection, command, argument, nick):
 def format_response(command, argument, nick, server_response):
     """Convierte la respuesta del servidor al formato esperado por el test."""
     #print(argument)
+    response_patterns = {
+    "/nick": f":.* NICK {argument}",
+    "/join": f":.* JOIN {argument}",
+    "/part": f":.* PART {argument}",
+    "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0]}",
+    "/notice": f":{nick}!.* NOTICE {argument.split()[0]}",
+    "/quit": "ERROR :Closing link",
+    "/mode": r" MODE ",
+    "/topic": r" TOPIC ",
+    "/names": (r' 353 ', r' 366 '),
+    "/list": (r' 322 ', r' 323 '),
+    "/invite": r" INVITE ",
+    "/kick": r" KICK ",
+    "/who": (r' 352 ', r' 315 '),
+    "/whois": (r' 311 ', r' 318 '),
+    "/whowas": r" 314 ",
+    "/oper": r" 381 ",
+    "/kill": r" KILL ",
+    "/wallops": r" WALLOPS ",
+    "/version": r" 351 ",
+    "/stats": r" 248 ",
+    "/links": r" 364 ",
+    "/time": r" 391 ",
+    "/admin": r" 256 ",
+    "/info": r" 371 ",
+    "/trace": r" 200 ",
+    "/connect": r" CONNECT ",
+    "/squit": r" SQUIT ",
+    "/ping": r" PONG ",
+    "/pong": r" PING ",
+    "/away": r" 306 ",
+    "/rehash": r" REHASH ",
+    "/die": r" DIE ",
+    "/restart": r" RESTART ",
+    "/userhost": r" 302 ",
+    "/ison": r" 303 ",
+    "ERROR": {
+        "403": "No existe el canal",
+        "482": "No tienes permiso para realizar esta acción",
+        "481": "Necesitas privilegios de operador",
+        "431": "Falta nickname",
+        "433": "El apodo ya está en uso",
+        "476": "Nombre de canal inválido"
+    }
+}
+    if isinstance(server_response, list):
+        server_response = " ".join(server_response)
+
+    error_messages = response_patterns.get("ERROR", {})
+    formatted = []
+    #print(f"server {server_response}")
+    parts = server_response.split()
+    if len(parts) > 1 and parts[1].isdigit() and parts[1] in response_patterns["ERROR"]:
+        return response_patterns["ERROR"][parts[1]]
+    
+    for response in server_response or []:
+        parts = response.split()
+        # print(response)
+        
+        # Detectar errores (solo si la respuesta tiene un código numérico)
+        if len(parts) > 1 and parts[1].isdigit() and parts[1] in error_messages:
+            # print(f"3")
+            return error_messages[parts[1]]
+        
+        # Formatear respuestas multiparte
+        if command == "/list":
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\n")  # Convertirlo en lista si es necesario
+            if ' 322 ' in response:
+                parts = response.split()
+                formatted.append(f"Canal: {parts[3]} - Usuarios: {parts[4]} - Tema: {' '.join(parts[5:])}")
+        elif command == "/names":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\n")
+            for response in server_response:
+                #print(f"Procesando línea de NAMES: {response}")  # Depuración
+                if " 353 " in response:  # Mensaje de nombres en el canal
+                    parts = response.split(":", 2)  # Divide en tres partes para asegurarse de capturar bien los nombres
+                    if len(parts) > 2:
+                        users = parts[2].strip()  # Extrae los nombres de usuario correctamente
+                        formatted.append(users)
+            return f"Usuarios en {argument}: {' '.join(formatted)}" if formatted else "No se encontraron usuarios."
+
+
+        elif command == "/who":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\n")
+            for response in server_response:
+                if ' 352 ' in response:  # Línea con datos de usuario
+                    parts = response.split()
+                    username = parts[7]
+                    channel = parts[3]
+                    ip = parts[4]
+                    real_name = " ".join(parts[9:])  # Captura el nombre real al final
+                    formatted.append(f"Usuario: {username} - Canal: {channel} - IP: {ip} - Nombre: {real_name}")
+                elif ' 315 ' in response:  # Fin de /WHO
+                    break
+            return formatted if formatted else "Información de usuarios obtenida"
+
+        elif command == "/whois":
+            if ' 311 ' in response:
+                parts = response.split()
+                formatted.append(f"Información de {parts[3]}: Usuario real: {parts[4]} - Host: {parts[5]}")
+            elif ' 312 ' in response:
+                parts = response.split()
+                formatted.append(f"Servidor: {parts[3]} - {parts[4]}")
+                
     mapping = {
         "/nick": f"Tu nuevo apodo es {argument}",
         "/join": f"Te has unido al canal {argument}",
@@ -184,9 +312,9 @@ def format_response(command, argument, nick, server_response):
         "/list": "Lista de canales obtenida",
         "/invite": f"Invitación enviada a {argument.split()[0] if argument else 'el usuario'}",
         "/kick": f"Usuario {argument.split()[1] if argument and len(argument.split()) > 1 else 'el usuario'} expulsado de {argument.split()[0] if argument else 'el canal'}",
-        "/who": f"Información de usuarios obtenida",
         "/whois": f"Información de {argument}: {server_response.split(':')[-1] if server_response else ''}",
         "/whowas": f"Historial de {argument}: {server_response.split(':')[-1] if server_response else ''}",
+        "/who": f"Información de usuarios:",
         "/oper": "Ahora eres un operador de IRC",
         "/kill": f"Conexión de {argument.split()[0] if argument else 'el usuario'} terminada",
         "/wallops": f"Mensaje global enviado: {argument}",
@@ -200,7 +328,6 @@ def format_response(command, argument, nick, server_response):
         "/connect": f"Conectando a {argument.split()[0] if argument else 'el servidor'}",
         "/squit": f"Servidor {argument.split()[0] if argument else 'el servidor'} desconectado",
         "/ping": "Ping exitoso",
-        "/pong": "Pong enviado",
         "/away": f"Mensaje de ausencia establecido: {argument}",
         "/rehash": "Configuración recargada",
         "/die": "Servidor cerrado",
@@ -208,7 +335,7 @@ def format_response(command, argument, nick, server_response):
         "/userhost": f"Información de usuario: {server_response.split()[-1] if server_response else ''}",
         "/ison": f"Usuarios conectados: {server_response.split()[-1] if server_response else ''}",
     }
-    return mapping.get(command, "Comando no reconocido")
+    return formatted if formatted else mapping.get(command, "Comando no reconocido")
 
 def run_interactive_mode(connection, nick):
     """

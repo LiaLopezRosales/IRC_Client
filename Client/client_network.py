@@ -7,6 +7,47 @@ import time
 from Common.irc_protocol import build_message, parse_message
 from Common.custom_errors import IRCConnectionError
 from Common.custom_errors import ProtocolError
+import re
+response_patterns = {
+    "/quit": "ERROR :Closing link",
+    "/mode": r" MODE ",
+    "/topic": r" TOPIC ",
+    "/names": (r' 353 ', r' 366 '),
+    "/list": (r' 322 ', r' 323 '),
+    "/invite": r" INVITE ",
+    "/kick": r" KICK ",
+    "/who": (r' 352 ', r' 315 '),
+    "/whois": (r' 311 ', r' 318 '),
+    "/whowas": r" 314 ",
+    "/oper": r" 381 ",
+    "/kill": r" KILL ",
+    "/wallops": r" WALLOPS ",
+    "/version": r" 351 ",
+    "/stats": r" 248 ",
+    "/links": r" 364 ",
+    "/time": r" 391 ",
+    "/admin": r" 256 ",
+    "/info": r" 371 ",
+    "/trace": r" 200 ",
+    "/connect": r" CONNECT ",
+    "/squit": r" SQUIT ",
+    "/ping": r" PONG ",
+    "/pong": r" PING ",
+    "/away": r" 306 ",
+    "/rehash": r" REHASH ",
+    "/die": r" DIE ",
+    "/restart": r" RESTART ",
+    "/userhost": r" 302 ",
+    "/ison": r" 303 ",
+    "ERROR": {
+        "403": "No existe el canal",
+        "482": "No tienes permiso para realizar esta acción",
+        "481": "Necesitas privilegios de operador",
+        "431": "Falta nickname",
+        "433": "Nickname ya está en uso",
+        "476": "Nombre de canal inválido"
+    }
+}
 
 class ClientConnection:
     """
@@ -28,17 +69,25 @@ class ClientConnection:
         self.expected_response = None  # Respuesta esperada para el comando actual
         self.response_received = threading.Event()  # Evento para sincronizar
         self.last_matching_response = None
+        self.multi_response_buffer = []  # Nuevo buffer para respuestas multiparte
+        self.response_terminator = None  # Patrón que indica fin de respuesta múltiple
         
-    def set_expected_response(self, pattern):
+    def set_expected_response(self, pattern, terminator=None):
         """Define el patrón de la respuesta que se espera recibir."""
         self.expected_response = pattern
+        self.response_terminator = terminator  # Ej: r'End of \w+'
+        self.multi_response_buffer = []
         self.response_received.clear()  # Reinicia el evento
 
     def wait_for_response(self, timeout=5):
         """Espera hasta recibir una respuesta que coincida con el patrón."""
+        #print(f"1 {self.expected_response}")
         if self.response_received.wait(timeout=timeout):
-            return self.last_matching_response
-        return None
+            if self.response_terminator:
+                return self.multi_response_buffer if self.multi_response_buffer else []
+            return [self.last_matching_response] if self.last_matching_response else []
+        
+        return []  # En lugar de None, devolver lista vacía
 
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
         for attempt in range(retries):
@@ -96,14 +145,35 @@ class ClientConnection:
                         # print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
                         self.pong(server_name)
                     else:
-                        # Verifica si la línea coincide con la respuesta esperada
-                        if self.expected_response and self.expected_response in line:
-                            self.last_matching_response = line
-                            self.response_received.set()  # Notifica que llegó la respuesta
+                        parts = line.split()
+                        if len(parts) > 1 and parts[1].isdigit():
+                            error_code = parts[1]
+                            if error_code in response_patterns["ERROR"]:
+                                self.last_matching_response = line
+                                self.response_received.set()  # Notificar a `wait_for_response()`
+                                continue  # No seguir procesando este mensaje
+
+                        # Manejar respuestas esperadas
+                        if self.expected_response and re.search(self.expected_response, line):
+                            #print(f"Coincidencia con expected_response: {self.expected_response}")
+                            self.multi_response_buffer.append(line)  # Almacenar la línea correctamente
+
+                            # Si no hay terminador, significa que es una respuesta de una sola línea
+                            if not self.response_terminator:
+                                self.last_matching_response = line
+                                self.response_received.set()
+                                continue
+
+                        # Si llega el terminador (`366` para /NAMES, `315` para /WHO), finaliza la respuesta múltiple
+                        if self.response_terminator and re.search(self.response_terminator, line):
+                            #print(f"Fin de respuesta múltiple detectado: {line}")
+                            self.response_received.set()
+
+
                         if message_queue:
                             message_queue.put(line)
-                        #else:
-                            #print(line)  # Opcional: imprime todos los mensajes (para depuración)
+                        # else:
+                        #     print(line)  # Opcional: imprime todos los mensajes (para depuración)
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
             self.close()
