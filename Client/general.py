@@ -1001,8 +1001,93 @@ class MainView(tk.Tk):
         submit_button = tk.Button(kick_window, text="Expulsar", command=call_command)
         submit_button.pack(pady=10)
 
+    # def check_users(self):
+    #     """Solicita y muestra la lista de usuarios en un canal usando el comando NAMES."""
+    #     try:
+    #         # Obtener el canal activo
+    #         channel = self.active_target.get().split("Canal: ")[1]
+    #     except IndexError:
+    #         messagebox.showerror("Error", "Debes seleccionar un canal.")
+    #         return
+
+    #     # Crear una cola para almacenar los usuarios del canal
+    #     self.users_queue = queue.Queue()
+
+    #     def request_names():
+    #         """Hilo para solicitar y procesar la lista de usuarios del canal."""
+    #         try:
+    #             # Enviar el comando NAMES al servidor
+    #             self.connection.names(channel)
+
+    #             # Procesar todas las líneas de respuesta
+    #             users = []
+    #             for response in self.connection.receive():
+    #                 if isinstance(response, tuple) and response[1] == "353":  # Código 353 para NAMES
+    #                     # Los usuarios están en el trailing (última parte del mensaje)
+    #                     users_in_line = response[3].split()
+    #                     users.extend(users_in_line)
+    #                 elif isinstance(response, tuple) and response[1] == "366":  # Fin de NAMES
+    #                     break
+
+    #             # Pasar la lista de usuarios a la cola
+    #             for user in users:
+    #                 self.users_queue.put(user)
+    #             self.users_queue.put(None)  # Fin de los datos
+    #         except Exception as e:
+    #             self.users_queue.put(f"Error: {e}")
+    #             self.users_queue.put(None)  # Fin de los datos en caso de error
+
+    #     # Crear un hilo para ejecutar la solicitud
+    #     thread = threading.Thread(target=request_names, daemon=True)
+    #     thread.start()
+
+    #     # Mostrar la ventana con los usuarios
+    #     self.display_users_window(channel)
+
+    # def display_users_window(self, channel):
+    #     """Muestra una ventana con la lista de usuarios del canal."""
+    #     users_window = tk.Toplevel(self)
+    #     users_window.title(f"Usuarios en {channel}")
+    #     users_window.geometry("300x400")
+    #     users_window.configure(bg=self.colors["bg"])
+
+    #     tk.Label(users_window, text=f"Usuarios en {channel}", font=("Arial", 16, "bold"),
+    #             bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
+
+    #     # Frame para contener la lista y la barra de desplazamiento
+    #     list_frame = tk.Frame(users_window, bg=self.colors["bg"])
+    #     list_frame.pack(fill="both", expand=True)
+
+    #     # Barra de desplazamiento
+    #     scrollbar = tk.Scrollbar(list_frame)
+    #     scrollbar.pack(side="right", fill="y")
+
+    #     # Listbox para mostrar usuarios
+    #     user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+    #                             bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 14))
+    #     user_listbox.pack(side="left", fill="both", expand=True)
+    #     scrollbar.config(command=user_listbox.yview)
+
+    #     # Actualizar la lista de usuarios desde la cola
+    #     def update_users():
+    #         try:
+    #             while not self.users_queue.empty():
+    #                 user = self.users_queue.get()
+    #                 if user is None:  # Fin de los datos
+    #                     return
+    #                 elif isinstance(user, str) and user.startswith("Error:"):
+    #                     messagebox.showerror("Error", user[7:])
+    #                 else:
+    #                     user_listbox.insert(tk.END, user)
+    #         except Exception as e:
+    #             print(f"Error actualizando la lista de usuarios: {e}")
+    #         finally:
+    #             self.after(100, update_users)
+
+    #     update_users()
+
     def check_users(self):
-        """Solicita y muestra la lista de usuarios en un canal usando el comando NAMES."""
+        """Solicita la lista de usuarios en un canal usando el comando NAMES."""
         try:
             # Obtener el canal activo
             channel = self.active_target.get().split("Canal: ")[1]
@@ -1010,81 +1095,11 @@ class MainView(tk.Tk):
             messagebox.showerror("Error", "Debes seleccionar un canal.")
             return
 
-        # Crear una cola para almacenar los usuarios del canal
-        self.users_queue = queue.Queue()
-
-        def request_names():
-            """Hilo para solicitar y procesar la lista de usuarios del canal."""
-            try:
-                # Enviar el comando NAMES al servidor
-                self.connection.names(channel)
-
-                # Procesar todas las líneas de respuesta
-                users = []
-                for response in self.connection.receive():
-                    if isinstance(response, tuple) and response[1] == "353":  # Código 353 para NAMES
-                        # Los usuarios están en el trailing (última parte del mensaje)
-                        users_in_line = response[3].split()
-                        users.extend(users_in_line)
-                    elif isinstance(response, tuple) and response[1] == "366":  # Fin de NAMES
-                        break
-
-                # Pasar la lista de usuarios a la cola
-                for user in users:
-                    self.users_queue.put(user)
-                self.users_queue.put(None)  # Fin de los datos
-            except Exception as e:
-                self.users_queue.put(f"Error: {e}")
-                self.users_queue.put(None)  # Fin de los datos en caso de error
-
-        # Crear un hilo para ejecutar la solicitud
-        thread = threading.Thread(target=request_names, daemon=True)
-        thread.start()
-
-        # Mostrar la ventana con los usuarios
-        self.display_users_window(channel)
-
-    def display_users_window(self, channel):
-        """Muestra una ventana con la lista de usuarios del canal."""
-        users_window = tk.Toplevel(self)
-        users_window.title(f"Usuarios en {channel}")
-        users_window.geometry("300x400")
-        users_window.configure(bg=self.colors["bg"])
-
-        tk.Label(users_window, text=f"Usuarios en {channel}", font=("Arial", 16, "bold"),
-                bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
-
-        # Frame para contener la lista y la barra de desplazamiento
-        list_frame = tk.Frame(users_window, bg=self.colors["bg"])
-        list_frame.pack(fill="both", expand=True)
-
-        # Barra de desplazamiento
-        scrollbar = tk.Scrollbar(list_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        # Listbox para mostrar usuarios
-        user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
-                                bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 14))
-        user_listbox.pack(side="left", fill="both", expand=True)
-        scrollbar.config(command=user_listbox.yview)
-
-        # Actualizar la lista de usuarios desde la cola
-        def update_users():
-            try:
-                while not self.users_queue.empty():
-                    user = self.users_queue.get()
-                    if user is None:  # Fin de los datos
-                        return
-                    elif isinstance(user, str) and user.startswith("Error:"):
-                        messagebox.showerror("Error", user[7:])
-                    else:
-                        user_listbox.insert(tk.END, user)
-            except Exception as e:
-                print(f"Error actualizando la lista de usuarios: {e}")
-            finally:
-                self.after(100, update_users)
-
-        update_users()
+        # Enviar el comando NAMES al servidor
+        try:
+            self.connection.names(channel)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo solicitar la lista de usuarios: {e}")
 
 
     def get_topic(self):
@@ -1384,7 +1399,7 @@ class MainView(tk.Tk):
             # "001", "002", "003", "004", "005",  # Comandos de registro
             # "251", "252", "253", "254", "255", "265", "266",  # Estadísticas
             # "375", "372", "376",  # MOTD
-            "322", "323", "315", "352", "311", "318", "364", "365", "351"  # Listas
+            "322", "323", "315", "352", "311", "318", "364", "365", "351", "353", "366"  # Listas
         }
 
         while not self.server_messages.empty():
@@ -1417,83 +1432,90 @@ class MainView(tk.Tk):
                     self._add_server_link(server_name, description)  # Añadir a la lista
 
                 elif command == "365":  # Fin de la lista de LINKS
-                    self.after(0, self._show_server_links)  # Mostrar la lista en UI
+                    self.after(0, self._show_server_links)  # Mostrar la lista en UI# Manejar la respuesta del comando NAMES
+                
+                if command == "353":  # Respuesta de NAMES (usuarios en un canal)
+                    channel = params[2]  # El canal está en params[2]
+                    users = trailing.split()  # Los usuarios están en el trailing
+                    self._add_channel_users(channel, users)  # Añadir a la lista
 
-                else:
+                elif command == "366":  # Fin de la lista de NAMES
+                    channel = params[1]  # El canal está en params[1]
+                    self.after(0, self._show_channel_users, channel)  # Mostrar la lista en UI
 
-                    # Comando de inicio del servidor
-                    if command == "001":  # Registro exitoso
-                        self.nick = params[0]
-                        self.username_label.config(text=self.nick)
-                        # Añadir el propio nick a la lista de usuarios
-                        self.all_users.add(self.nick)
-                        self.user_list.insert(tk.END, self.nick)
-                        self.start_auto_updates()  # Iniciar carga de listas
+                # Comando de inicio del servidor
+                if command == "001":  # Registro exitoso
+                    self.nick = params[0]
+                    self.username_label.config(text=self.nick)
+                    # Añadir el propio nick a la lista de usuarios
+                    self.all_users.add(self.nick)
+                    self.user_list.insert(tk.END, self.nick)
+                    self.start_auto_updates()  # Iniciar carga de listas
 
+                
+                # Manejar cambio de nick (NICK)
+                if command == "NICK":
+                    old_nick = prefix.split('!')[0] if '!' in prefix else prefix
+                    print(old_nick)
+                    new_nick = trailing    #.strip()
+                    print(new_nick)
                     
-                    # Manejar cambio de nick (NICK)
-                    if command == "NICK":
-                        old_nick = prefix.split('!')[0] if '!' in prefix else prefix
-                        print(old_nick)
-                        new_nick = trailing    #.strip()
-                        print(new_nick)
-                        
-                        # Actualizar lista de usuarios
-                        if old_nick in self.all_users:
-                            self.all_users.remove(old_nick)
-                            self.all_users.add(new_nick)
-                        
-                        # Actualizar interfaz
-                        self.user_list.delete(0, tk.END)
-                        for user in self.all_users:
-                            self.user_list.insert(tk.END, user)
-                        
-                        # Actualizar historial de mensajes
-                        for target in list(self.message_history.keys()):
-                            updated_messages = []
-                            for sender, msg in self.message_history[target]:
-                                if sender == old_nick:
-                                    updated_messages.append((new_nick, msg))
-                                else:
-                                    updated_messages.append((sender, msg))
-                            self.message_history[target] = updated_messages
-                        
-                        # Actualizar target activo si es afectado
-                        current_target = self.active_target.get()
-                        if current_target == f"Usuario: {old_nick}":
-                            self.active_target.set(f"Usuario: {new_nick}")
-                            self.update_active_target()  # Forzar actualización de la interfaz
+                    # Actualizar lista de usuarios
+                    if old_nick in self.all_users:
+                        self.all_users.remove(old_nick)
+                        self.all_users.add(new_nick)
+                    
+                    # Actualizar interfaz
+                    self.user_list.delete(0, tk.END)
+                    for user in self.all_users:
+                        self.user_list.insert(tk.END, user)
+                    
+                    # Actualizar historial de mensajes
+                    for target in list(self.message_history.keys()):
+                        updated_messages = []
+                        for sender, msg in self.message_history[target]:
+                            if sender == old_nick:
+                                updated_messages.append((new_nick, msg))
+                            else:
+                                updated_messages.append((sender, msg))
+                        self.message_history[target] = updated_messages
+                    
+                    # Actualizar target activo si es afectado
+                    current_target = self.active_target.get()
+                    if current_target == f"Usuario: {old_nick}":
+                        self.active_target.set(f"Usuario: {new_nick}")
+                        self.update_active_target()  # Forzar actualización de la interfaz
 
-                    # Comandos PRIVMSG/NOTICE (manejo especial)
-                    if command in ["PRIVMSG", "NOTICE"]:
-                        if not params:
-                            continue
-                        target = params[0]
-                        sender = prefix.split('!')[0] if '!' in prefix else "Servidor"
-                        
-                        # Actualizar historial y notificaciones
-                        if target not in self.message_history:
-                            self.message_history[target] = []
-                        self.message_history[target].append((sender, trailing))
-                        self.new_message_indicators[target] = True
+                # Comandos PRIVMSG/NOTICE (manejo especial)
+                if command in ["PRIVMSG", "NOTICE"]:
+                    if not params:
+                        continue
+                    target = params[0]
+                    sender = prefix.split('!')[0] if '!' in prefix else "Servidor"
+                    
+                    # Actualizar historial y notificaciones
+                    if target not in self.message_history:
+                        self.message_history[target] = []
+                    self.message_history[target].append((sender, trailing))
+                    self.new_message_indicators[target] = True
 
-                        # Actualizar UI si es el target activo
-                        if target == self.active_target.get():
-                            self.display_message(trailing, sender)
-                        else:
-                            self.signal_new_message(target)
+                    # Actualizar UI si es el target activo
+                    if target == self.active_target.get():
+                        self.display_message(trailing, sender)
+                    else:
+                        self.signal_new_message(target)
 
-                    # Todos los demás comandos van al historial del servidor
-                    elif command not in handled_commands:
-                        if "Servidor" not in self.message_history:
-                            self.message_history["Servidor"] = []
-                        self.message_history["Servidor"].append(("Servidor", display_text))
-                        self.new_message_indicators["Servidor"] = True
+                # Todos los demás comandos van al historial del servidor
+                elif command not in handled_commands:
+                    if "Servidor" not in self.message_history:
+                        self.message_history["Servidor"] = []
+                    self.message_history["Servidor"].append(("Servidor", display_text))
+                    self.new_message_indicators["Servidor"] = True
 
-                        if self.active_target.get() == "Servidor":
-                            self.display_message(display_text, "Servidor")
-                        else:
-                            self.signal_new_message("Servidor")
+                    if self.active_target.get() == "Servidor":
+                        self.display_message(display_text, "Servidor")
+                    else:
+                        self.signal_new_message("Servidor")
 
             except IndexError as e:
                 print(f"Error de índice en mensaje: {raw_message}")
@@ -1568,7 +1590,47 @@ class MainView(tk.Tk):
         # Limpiar la lista temporal
         self.temp_server_links = []
 
+    def _add_channel_users(self, channel, users):
+        """Añade usuarios a la lista temporal de un canal."""
+        if not hasattr(self, "temp_channel_users"):
+            self.temp_channel_users = {}  # Diccionario para almacenar usuarios por canal
+        if channel not in self.temp_channel_users:
+            self.temp_channel_users[channel] = []
+        self.temp_channel_users[channel].extend(users)
 
+    def _show_channel_users(self, channel):
+        """Muestra la lista de usuarios de un canal en una ventana emergente."""
+        if not hasattr(self, "temp_channel_users") or channel not in self.temp_channel_users:
+            messagebox.showinfo(f"Usuarios en {channel}", "No se encontraron usuarios.")
+            return
+
+        # Crear la ventana para mostrar los usuarios
+        users_window = tk.Toplevel(self)
+        users_window.title(f"Usuarios en {channel}")
+        users_window.geometry("300x400")
+        users_window.configure(bg=self.colors["bg"])
+
+        tk.Label(users_window, text=f"Usuarios en {channel}", font=("Arial", 16, "bold"),
+                bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
+
+        # Frame para contener la lista y la barra de desplazamiento
+        list_frame = tk.Frame(users_window, bg=self.colors["bg"])
+        list_frame.pack(fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+                                bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 14))
+        user_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=user_listbox.yview)
+
+        # Añadir usuarios a la lista
+        for user in self.temp_channel_users[channel]:
+            user_listbox.insert(tk.END, user)
+
+        # Limpiar la lista temporal del canal
+        del self.temp_channel_users[channel]
 
 
 
