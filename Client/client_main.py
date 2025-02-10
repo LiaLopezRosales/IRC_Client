@@ -170,7 +170,7 @@ def execute_command(connection, command, argument, nick):
     
 def format_response(command, argument, nick, server_response):
     """Convierte la respuesta del servidor al formato esperado por el test."""
-    print(argument)
+    #print(argument)
     mapping = {
         "/nick": f"Tu nuevo apodo es {argument}",
         "/join": f"Te has unido al canal {argument}",
