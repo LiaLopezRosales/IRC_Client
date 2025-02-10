@@ -7,6 +7,58 @@ import time
 from Common.irc_protocol import build_message, parse_message
 from Common.custom_errors import IRCConnectionError
 from Common.custom_errors import ProtocolError
+import re
+response_patterns = {
+    "ERROR": {
+        "401": "No existe canal/nickname",
+        "402": "No existe el servidor",
+        "403": "No existe el canal",
+        "404": "No puedes enviar al canal",
+        "405": "Te has unido a demasiados canales",
+        "406": "No existió el nickname",
+        "407": "Demasiados objetivos",
+        "408": "No existe el servicio",
+        "421": "Comando desconocido",
+        "422": "No se pudo abrir archivo MOTD/No hay MOTD",
+        "423": "No hay información administrativa",
+        "431": "Falta nickname",
+        "432": "Nickname inválido",
+        "433": "Nickname ya está en uso",
+        "437": "Nickname/canal no disponible temporalmente",
+        "441": "El usuario objetivo no está en el canal",
+        "442": "No estás en el canal",
+        "443": "El usuario ya pertenece al canal",
+        "444": "Usuario no logeado",
+        "445": "Servidor no soporta SUMMON",
+        "446": "Servidor no soporta USERS",
+        "461": "Faltan parámetros",
+        "462": "Ya registrado",
+        "464": "Contraseña incorrecta",
+        "465": "Exiliado del servidor",
+        "471": "No puedes unirte al canal(canal lleno)",
+        "473": "No puedes unirte al canal(solo con invitación)",
+        "474": "No puedes unirte al canal(exiliado del canal)",
+        "475": "No puedes unirte al canal(+k)",
+        "476": "Nombre de canal inválido",
+        "477": "El canal no soporta modos",
+        "482": "No tienes permiso para realizar esta acción",
+        "481": "Necesitas privilegios de operador",
+        "483": "No puedes matar un servidor",
+        "484": "Conexión restringida",
+        "485": "No eres el operador original del canal",
+        "491": "Credenciales incorrectas",
+        "501": "Modo no reconocido",
+        "502": "No puedes cambiar el modo de otro usuario(fuera de un canal)"
+    }
+}
+expected_codes = {
+    "/whois": [r" 311 ", r" 312 ", r" 317 ", r" 319 "],  # Todos los códigos que pueden aparecer en WHOIS
+    "/whowas": [r" 314 ", r" 312 "],  # Todos los códigos para WHOWAS
+    "/admin": [r"256" , r"257", r"258" , r"259"],
+    "/motd": [r"375" , r"372", r"376"],
+    "/lusers": [r"251" , r"252", r"253" , r"254", r"255" , r"265", r"266"],
+}
+
 
 class ClientConnection:
     """
@@ -28,17 +80,34 @@ class ClientConnection:
         self.expected_response = None  # Respuesta esperada para el comando actual
         self.response_received = threading.Event()  # Evento para sincronizar
         self.last_matching_response = None
+        self.multi_response_buffer = []  # Nuevo buffer para respuestas multiparte
+        self.response_terminator = None  # Patrón que indica fin de respuesta múltiple
+        self.command = None
         
-    def set_expected_response(self, pattern):
+    def set_expected_response(self, command, pattern, terminator=None):
         """Define el patrón de la respuesta que se espera recibir."""
-        self.expected_response = pattern
-        self.response_received.clear()  # Reinicia el evento
+        if command == "/topic":
+            self.command = command
+            self.expected_response = pattern if isinstance(pattern, tuple) else (pattern,)
+            self.response_terminator = terminator
+            self.multi_response_buffer = []
+            self.response_received.clear()
+        else:
+            self.command = command
+            self.expected_response = pattern
+            self.response_terminator = terminator  # Ej: r'End of \w+'
+            self.multi_response_buffer = []
+            self.response_received.clear()  # Reinicia el evento
 
     def wait_for_response(self, timeout=5):
         """Espera hasta recibir una respuesta que coincida con el patrón."""
+        #print(f"1 {self.expected_response}")
         if self.response_received.wait(timeout=timeout):
-            return self.last_matching_response
-        return None
+            if self.response_terminator:
+                return self.multi_response_buffer if self.multi_response_buffer else []
+            return [self.last_matching_response] if self.last_matching_response else []
+        
+        return []  # En lugar de None, devolver lista vacía
 
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
         for attempt in range(retries):
@@ -96,14 +165,102 @@ class ClientConnection:
                         # print(f"[CLIENTE] PING recibido desde {server_name}. Respondiendo con PONG.")
                         self.pong(server_name)
                     else:
-                        # Verifica si la línea coincide con la respuesta esperada
-                        if self.expected_response and self.expected_response in line:
-                            self.last_matching_response = line
-                            self.response_received.set()  # Notifica que llegó la respuesta
+                        parts = line.split()
+                        if len(parts) > 1 and parts[1].isdigit():
+                            error_code = parts[1]
+                            if error_code in response_patterns["ERROR"]:
+                                self.last_matching_response = line
+                                self.response_received.set()  # Notificar a `wait_for_response()`
+                                continue  # No seguir procesando este mensaje
+                            
+                        # Manejar mensajes espontáneos (PRIVMSG, NOTICE, etc.)
+                        if "PRIVMSG" in line or "NOTICE" in line:
+                            sender = line.split('!')[0][1:]  # Obtener el remitente
+                            msg_content = line.split(":", 2)[-1]  # Obtener el mensaje
+                            print(f"\n[{sender}] {msg_content}")  # Mostrar el mensaje directamente
+                            continue  # No procesar como respuesta esperada
+                        
+                        # Detectar si alguien se une a un canal (JOIN)
+                        if " JOIN " in line:
+                            parts = line.split()
+                            if len(parts) >= 3:
+                                user = line.split("!")[0][1:]  # Extrae el nombre de usuario
+                                channel = parts[-1]  # Canal al que se unió
+                                print(f"\n🔹 {user} se ha unido a {channel}")
+                            continue
+
+                        # Detectar si alguien sale de un canal (PART)
+                        if " PART " in line:
+                            parts = line.split()
+                            if len(parts) >= 3:
+                                user = line.split("!")[0][1:]  # Extrae el nombre de usuario
+                                channel = parts[2]  # Canal del que salió
+                                reason = " ".join(parts[3:]).lstrip(":") if len(parts) > 3 else ""
+                                print(f"\n🔸 {user} ha salido de {channel} ({reason})")
+                            continue
+
+                        # Detectar si alguien es expulsado (KICK)
+                        if " KICK " in line:
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                kicker = line.split("!")[0][1:]  # Quién ejecutó la acción
+                                channel = parts[2]  # Canal donde ocurrió el kick
+                                kicked_user = parts[3]  # Usuario expulsado
+                                reason = " ".join(parts[4:]).lstrip(":") if len(parts) > 4 else ""
+                                print(f"\n❌ {kicked_user} fue expulsado de {channel} por {kicker} ({reason})")
+                            continue
+
+                        # Detectar si el usuario fue invitado a un canal (INVITE)
+                        if " INVITE " in line:
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                inviter = line.split("!")[0][1:]  # Quién envió la invitación
+                                invited_user = parts[2]  # Usuario invitado
+                                channel = parts[-1].lstrip(":")  # Canal al que fue invitado
+                                print(f"\n📩 {inviter} ha invitado a {invited_user} a {channel}")
+                            continue
+
+                        if self.command == "/topic":
+                            if any(re.search(code, line) for code in self.expected_response):
+                                #print(f"Coincidencia con expected_response para {self.command}: {line}")
+                                self.multi_response_buffer.append(line)
+
+                                # Si no hay terminador, es una respuesta de una sola línea y se almacena
+                                if not self.response_terminator:
+                                    self.last_matching_response = line
+                                    self.response_received.set()
+                                    continue
+                        else:
+
+                            # Manejar respuestas esperadas
+                            if self.command in expected_codes:
+                                if any(re.search(code, line) for code in expected_codes[self.command]):
+                                    #print(f"Coincidencia con expected_response para {self.command}: {line}")
+                                    self.multi_response_buffer.append(line)
+                                if self.response_terminator and re.search(self.response_terminator, line):
+                                    #print(f"Fin de respuesta múltiple detectado: {line}")
+                                    self.response_received.set()
+                            else:
+                                if self.expected_response and re.search(self.expected_response, line):
+                                    #print(f"Coincidencia con expected_response: {self.expected_response}")
+                                    self.multi_response_buffer.append(line)  # Almacenar la línea correctamente
+
+                                    # Si no hay terminador, significa que es una respuesta de una sola línea
+                                    if not self.response_terminator:
+                                        self.last_matching_response = line
+                                        self.response_received.set()
+                                        continue
+
+                                # Si llega el terminador (`366` para /NAMES, `315` para /WHO), finaliza la respuesta múltiple
+                                if self.response_terminator and re.search(self.response_terminator, line):
+                                    #print(f"Fin de respuesta múltiple detectado: {line}")
+                                    self.response_received.set()
+
+
                         if message_queue:
                             message_queue.put(line)
-                        else:
-                            print(line)  # Opcional: imprime todos los mensajes (para depuración)
+                        # else:
+                        #     print(line)  # Opcional: imprime todos los mensajes (para depuración)
         except Exception as e:
             print(f"Error al recibir mensaje: {e}")
             self.close()
@@ -117,15 +274,18 @@ class ClientConnection:
         """
         self.send("JOIN", [channel])
 
-    def change_topic(self, channel, new_topic):
+    def change_topic(self, channel, new_topic=None):
         """
-        Envía un comando Topic para cambiar el tema de un canal.
+        Envía un comando TOPIC para consultar o cambiar el tema de un canal.
 
         Args:
             channel (str): Nombre del canal (e.g., "#general").
-            new_topic (srt): Nuevo mensaje a colocar en el topic
+            new_topic (str, optional): Nuevo tema. Si es None o "", se consulta el tema actual.
         """
-        self.send("TOPIC", [channel], new_topic)
+        if new_topic:  # Cambiar el tema
+            self.send("TOPIC", [channel], new_topic)
+        else:  # Consultar el tema
+            self.send("TOPIC", [channel])
 
     def change_mode(self, target, mode, params=None):
         """
@@ -209,7 +369,7 @@ class ClientConnection:
         Envía un PONG al servidor en respuesta a un PING.
         """
         self.send("PONG", [server_name])
-        print(f"[CLIENTE] PONG enviado al servidor: {server_name}")
+        #print(f"[CLIENTE] PONG enviado al servidor: {server_name}")
 
     def close(self):
         if self.is_connected:
@@ -322,11 +482,11 @@ class ClientConnection:
         """
         self.send("VERSION")
 
-    def stats(self):
+    def stats(self,argument):
         """
         Solicita estadísticas del servidor.
         """
-        self.send("STATS")
+        self.send("STATS", [argument])
 
     def links(self):
         """
@@ -521,7 +681,7 @@ class ClientConnection:
         else:
             self.send("USERS")
 
-    def wallops(self, message):
+    def operwall(self, message):
         """
         Envía un mensaje global a todos los operadores de la red.
 

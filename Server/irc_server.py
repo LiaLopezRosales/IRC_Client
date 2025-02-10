@@ -222,7 +222,7 @@ class IRCServer:
                         continue
 
                     password = parts[1]
-                    # Aquí puedes agregar lógica para validar la contraseña
+                    # Futura lógica para validar la contraseña
                     print(f"[SERVER] Cliente {nickname} envió la contraseña: {password}")
                     
                 elif data.startswith("JOIN"):
