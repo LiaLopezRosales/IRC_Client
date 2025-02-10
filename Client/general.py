@@ -27,8 +27,10 @@ class MainView(tk.Tk):
         
         # Conexión al servidor IRC
         self.connection = None
-        self.server_messages = queue.Queue()  # Cola para mensajes del servidor
-
+        self.server_messages = queue.Queue()  # Para mensajes generales
+        self.channel_list_queue = queue.Queue()  # Para respuestas de LIST
+        self.user_list_queue = queue.Queue()  # Para respuestas de WHO
+        
         # Variables de estado
         self.active_target = tk.StringVar(value="Servidor")
         # self.active_target.set("Servidor")
@@ -330,7 +332,7 @@ class MainView(tk.Tk):
     def open_context_menu(self):
         """Despliega un menú con opciones para canales o usuarios."""
         target = self.active_target.get()
-        if target == "Servidor":
+        if self.active_target_type == -1:
             # messagebox.showerror("Error", "Debes seleccionar un canal o usuario primero.")
             return
 
@@ -398,58 +400,64 @@ class MainView(tk.Tk):
         if not self.connection:
             messagebox.showerror("Error", "No estás conectado al servidor.")
             return
-
-        # Crear una cola para almacenar la información del servidor
-        self.server_info_queue = queue.Queue()
-
-        def request_version():
-            """Hilo para solicitar y procesar la versión del servidor."""
-            try:
-                # Solicita la versión del servidor
-                self.connection.version()
-
-                # Procesa todas las líneas de respuesta
-                version_found = False
-                for response in self.connection.receive():
-                    if isinstance(response, tuple) and response[1] == "351":  # Código 351 para VERSION
-                        server_name = response[2][2]  # Nombre del servidor
-                        version_info = response[2][1]  # Versión del servidor
-                        self.server_info_queue.put((server_name, version_info))
-                        version_found = True
-                        break  # Una vez encontrada la versión, no seguimos procesando
-                if not version_found:
-                    self.server_info_queue.put(("Error", "No se pudo obtener la versión del servidor."))
-            except Exception as e:
-                self.server_info_queue.put(("Error", f"No se pudo obtener la información: {e}"))
-            finally:
-                self.server_info_queue.put(None)  # Fin de los datos
-
-        # Crear un hilo para la solicitud y el procesamiento
-        thread = threading.Thread(target=request_version, daemon=True)
-        thread.start()
-
-        # Actualizar la información en la interfaz
-        self.update_server_info()
-
-    def update_server_info(self):
-        """Procesa la información del servidor desde la cola y actualiza la interfaz."""
+        
+        # Enviar el comando VERSION al servidor
         try:
-            while not self.server_info_queue.empty():
-                info = self.server_info_queue.get()
-                if info is None:  # Fin de los datos
-                    return
-
-                # Desempaqueta y muestra la información
-                server_name, version_info = info
-                if server_name == "Error":
-                    messagebox.showerror("Error", version_info)
-                else:
-                    messagebox.showinfo("Información", f"Servidor: {server_name}\nVersión: {version_info}")
+            self.connection.version()
         except Exception as e:
-            print(f"Error actualizando la información del servidor: {e}")
-        finally:
-            # Vuelve a llamar a esta función después de 100 ms
-            self.after(100, self.update_server_info)
+            messagebox.showerror("Error", f"No se pudo solicitar la información del servidor: {e}")
+
+        # # Crear una cola para almacenar la información del servidor
+        # self.server_info_queue = queue.Queue()
+
+        # def request_version():
+        #     """Hilo para solicitar y procesar la versión del servidor."""
+        #     try:
+        #         # Solicita la versión del servidor
+        #         self.connection.version()
+
+        #         # # Procesa todas las líneas de respuesta
+        #         # version_found = False
+        #         # for response in self.connection.receive():
+        #         #     if isinstance(response, tuple) and response[1] == "351":  # Código 351 para VERSION
+        #         #         server_name = response[2][2]  # Nombre del servidor
+        #         #         version_info = response[2][1]  # Versión del servidor
+        #         #         self.server_info_queue.put((server_name, version_info))
+        #         #         version_found = True
+        #         #         break  # Una vez encontrada la versión, no seguimos procesando
+        #         # if not version_found:
+        #         #     self.server_info_queue.put(("Error", "No se pudo obtener la versión del servidor."))
+        #     except Exception as e:
+        #         self.server_info_queue.put(("Error", f"No se pudo obtener la información: {e}"))
+        #     finally:
+        #         self.server_info_queue.put(None)  # Fin de los datos
+
+        # # Crear un hilo para la solicitud y el procesamiento
+        # thread = threading.Thread(target=request_version, daemon=True)
+        # thread.start()
+
+        # # Actualizar la información en la interfaz
+        # self.update_server_info()
+
+    # def update_server_info(self):
+    #     """Procesa la información del servidor desde la cola y actualiza la interfaz."""
+    #     try:
+    #         while not self.server_info_queue.empty():
+    #             info = self.server_info_queue.get()
+    #             if info is None:  # Fin de los datos
+    #                 return
+
+    #             # Desempaqueta y muestra la información
+    #             server_name, version_info = info
+    #             if server_name == "Error":
+    #                 messagebox.showerror("Error", version_info)
+    #             else:
+    #                 messagebox.showinfo("Información", f"Servidor: {server_name}\nVersión: {version_info}")
+    #     except Exception as e:
+    #         print(f"Error actualizando la información del servidor: {e}")
+    #     finally:
+    #         # Vuelve a llamar a esta función después de 100 ms
+    #         self.after(100, self.update_server_info)
 
 
     def server_links_action(self):
@@ -1266,7 +1274,8 @@ class MainView(tk.Tk):
         """Procesa respuestas del comando LIST."""
         while True:
             try:                
-                raw_response = self.server_messages.get(timeout=1)
+                # raw_response = self.server_messages.get(timeout=1)
+                raw_response = self.channel_list_queue.get(timeout=1)
                 prefix, command, params, trailing = parse_message(raw_response)
             
                 if command == "322":  # LIST
@@ -1294,7 +1303,8 @@ class MainView(tk.Tk):
         """Procesa respuestas del comando WHO."""
         while True:
             try:
-                raw_response = self.server_messages.get(timeout=1)
+                # raw_response = self.server_messages.get(timeout=1)
+                raw_response = self.user_list_queue.get(timeout=1)
                 prefix, command, params, trailing = parse_message(raw_response)
             
                 if command == "352":  # WHO
@@ -1380,79 +1390,95 @@ class MainView(tk.Tk):
 
                 print(f"prefix: {prefix}, command: {command}, params: {params}, trailing: {trailing}")
 
-                # Comando de inicio del servidor
-                if command == "001":  # Registro exitoso
-                    self.nick = params[0]
-                    self.username_label.config(text=self.nick)
-                    # Añadir el propio nick a la lista de usuarios
-                    self.all_users.add(self.nick)
-                    self.user_list.insert(tk.END, self.nick)
-                    self.start_auto_updates()  # Iniciar carga de listas
+                print(f"[DEBUG] Comando: {command}, Params: {params}, Trailing: {trailing}")  # Depuración
 
+                # Redirigir respuestas específicas a colas dedicadas
+                if command in ["322", "323"]:  # Respuestas de LIST
+                    self.channel_list_queue.put(raw_message)
+                elif command in ["352", "315"]:  # Respuestas de WHO
+                    self.user_list_queue.put(raw_message)
+
+                # Manejar la respuesta del comando VERSION (código 351)
+                elif command == "351":  # Respuesta de VERSION
+                    server_name = params[2]  # Nombre del servidor
+                    version_info = params[1]  # Versión del servidor
+                    self.after(0, self._show_server_info, server_name, version_info)  # Mostrar en UI
                 
-                # Manejar cambio de nick (NICK)
-                if command == "NICK":
-                    old_nick = prefix.split('!')[0] if '!' in prefix else prefix
-                    print(old_nick)
-                    new_nick = trailing    #.strip()
-                    print(new_nick)
-                    
-                    # Actualizar lista de usuarios
-                    if old_nick in self.all_users:
-                        self.all_users.remove(old_nick)
-                        self.all_users.add(new_nick)
-                    
-                    # Actualizar interfaz
-                    self.user_list.delete(0, tk.END)
-                    for user in self.all_users:
-                        self.user_list.insert(tk.END, user)
-                    
-                    # Actualizar historial de mensajes
-                    for target in list(self.message_history.keys()):
-                        updated_messages = []
-                        for sender, msg in self.message_history[target]:
-                            if sender == old_nick:
-                                updated_messages.append((new_nick, msg))
-                            else:
-                                updated_messages.append((sender, msg))
-                        self.message_history[target] = updated_messages
-                    
-                    # Actualizar target activo si es afectado
-                    current_target = self.active_target.get()
-                    if current_target == f"Usuario: {old_nick}":
-                        self.active_target.set(f"Usuario: {new_nick}")
-                        self.update_active_target()  # Forzar actualización de la interfaz
+                else:
 
-                # Comandos PRIVMSG/NOTICE (manejo especial)
-                if command in ["PRIVMSG", "NOTICE"]:
-                    if not params:
-                        continue
-                    target = params[0]
-                    sender = prefix.split('!')[0] if '!' in prefix else "Servidor"
+                    # Comando de inicio del servidor
+                    if command == "001":  # Registro exitoso
+                        self.nick = params[0]
+                        self.username_label.config(text=self.nick)
+                        # Añadir el propio nick a la lista de usuarios
+                        self.all_users.add(self.nick)
+                        self.user_list.insert(tk.END, self.nick)
+                        self.start_auto_updates()  # Iniciar carga de listas
+
                     
-                    # Actualizar historial y notificaciones
-                    if target not in self.message_history:
-                        self.message_history[target] = []
-                    self.message_history[target].append((sender, trailing))
-                    self.new_message_indicators[target] = True
+                    # Manejar cambio de nick (NICK)
+                    if command == "NICK":
+                        old_nick = prefix.split('!')[0] if '!' in prefix else prefix
+                        print(old_nick)
+                        new_nick = trailing    #.strip()
+                        print(new_nick)
+                        
+                        # Actualizar lista de usuarios
+                        if old_nick in self.all_users:
+                            self.all_users.remove(old_nick)
+                            self.all_users.add(new_nick)
+                        
+                        # Actualizar interfaz
+                        self.user_list.delete(0, tk.END)
+                        for user in self.all_users:
+                            self.user_list.insert(tk.END, user)
+                        
+                        # Actualizar historial de mensajes
+                        for target in list(self.message_history.keys()):
+                            updated_messages = []
+                            for sender, msg in self.message_history[target]:
+                                if sender == old_nick:
+                                    updated_messages.append((new_nick, msg))
+                                else:
+                                    updated_messages.append((sender, msg))
+                            self.message_history[target] = updated_messages
+                        
+                        # Actualizar target activo si es afectado
+                        current_target = self.active_target.get()
+                        if current_target == f"Usuario: {old_nick}":
+                            self.active_target.set(f"Usuario: {new_nick}")
+                            self.update_active_target()  # Forzar actualización de la interfaz
 
-                    # Actualizar UI si es el target activo
-                    if target == self.active_target.get():
-                        self.display_message(trailing, sender)
-                    else:
-                        self.signal_new_message(target)
+                    # Comandos PRIVMSG/NOTICE (manejo especial)
+                    if command in ["PRIVMSG", "NOTICE"]:
+                        if not params:
+                            continue
+                        target = params[0]
+                        sender = prefix.split('!')[0] if '!' in prefix else "Servidor"
+                        
+                        # Actualizar historial y notificaciones
+                        if target not in self.message_history:
+                            self.message_history[target] = []
+                        self.message_history[target].append((sender, trailing))
+                        self.new_message_indicators[target] = True
 
-                # Todos los demás comandos van al historial del servidor
-                elif command not in handled_commands:
-                    if "Servidor" not in self.message_history:
-                        self.message_history["Servidor"] = []
-                    self.message_history["Servidor"].append(("Servidor", display_text))
-                    self.new_message_indicators["Servidor"] = True
+                        # Actualizar UI si es el target activo
+                        if target == self.active_target.get():
+                            self.display_message(trailing, sender)
+                        else:
+                            self.signal_new_message(target)
 
-                    if self.active_target.get() == "Servidor":
-                        self.display_message(display_text, "Servidor")
-                    else:
-                        self.signal_new_message("Servidor")
+                    # Todos los demás comandos van al historial del servidor
+                    elif command not in handled_commands:
+                        if "Servidor" not in self.message_history:
+                            self.message_history["Servidor"] = []
+                        self.message_history["Servidor"].append(("Servidor", display_text))
+                        self.new_message_indicators["Servidor"] = True
+
+                        if self.active_target.get() == "Servidor":
+                            self.display_message(display_text, "Servidor")
+                        else:
+                            self.signal_new_message("Servidor")
 
             except IndexError as e:
                 print(f"Error de índice en mensaje: {raw_message}")
@@ -1483,7 +1509,9 @@ class MainView(tk.Tk):
             self.channels[channel] = {"topic": "sin definir"}
             self.channel_list.insert(tk.END, channel)
 
-
+    def _show_server_info(self, server_name, version_info):
+        """Muestra la información del servidor en un cuadro de diálogo."""
+        messagebox.showinfo("Información del Servidor", f"Servidor: {server_name}\nVersión: {version_info}")
 
 
 # Prueba independiente de la vista principal
