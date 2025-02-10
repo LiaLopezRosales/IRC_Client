@@ -466,76 +466,82 @@ class MainView(tk.Tk):
             messagebox.showerror("Error", "No estás conectado al servidor.")
             return
 
-        # Crear una cola para almacenar los datos del servidor
-        self.server_links_queue = queue.Queue()
-
-        def request_links():
-            """Hilo para solicitar y procesar la lista de servidores."""
-            try:
-                # Solicita la lista de servidores
-                self.connection.links()
-
-                while True:
-                    for response in self.connection.receive():
-                        prefix, command, params, trailing = parse_message(response)
-
-                        if command == "364":
-                            server_name = prefix
-                            description = trailing
-                        # if isinstance(response, tuple) and response[1] == "364":  # Código 364 para LINKS
-                        #     server_name = response[2][0]  # Nombre del servidor
-                        #     description = response[3]  # Trailing contiene la descripción
-                            self.server_links_queue.put(f"{server_name} - {description}")
-                        elif command == "365":
-                        # elif isinstance(response, tuple) and response[1] == "365":  # Fin de la lista de LINKS
-                            break
-            except Exception as e:
-                self.server_links_queue.put(f"Error: {e}")
-            finally:
-                # Marca el final de los datos en la cola
-                self.server_links_queue.put(None)
-
-        # Crear un hilo para la solicitud y el procesamiento
-        thread = threading.Thread(target=request_links, daemon=True)
-        thread.start()
-
-        # Crear la ventana para mostrar los servidores
-        servers_window = tk.Toplevel(self)
-        servers_window.title(f"Servidores conectados")
-        servers_window.geometry("400x400")
-        servers_window.configure(bg=self.colors["bg"])
-
-        tk.Label(servers_window, text=f"Servidores conectados", font=("Arial", 16, "bold"),
-                bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
-
-        # Frame para contener la lista y la barra de desplazamiento
-        list_frame = tk.Frame(servers_window, bg=self.colors["bg"])
-        list_frame.pack(fill="both", expand=True)
-
-        scrollbar = tk.Scrollbar(list_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        self.server_linksbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
-                                        bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
-        self.server_linksbox.pack(side="left", fill="both", expand=True)
-        scrollbar.config(command=self.server_linksbox.yview)
-
-        # Actualizar la lista de servidores periódicamente
-        self.update_server_links()
-
-    def update_server_links(self):
-        """Actualiza la lista de servidores desde la cola."""
+        # Enviar el comando LINKS al servidor
         try:
-            while not self.server_links_queue.empty():
-                server = self.server_links_queue.get()
-                if server is None:  # Fin de los datos
-                    return
-                self.server_linksbox.insert(tk.END, server)
+            self.connection.links()
         except Exception as e:
-            print(f"Error actualizando lista de servidores: {e}")
-        finally:
-            # Vuelve a llamar a esta función después de 100 ms
-            self.after(100, self.update_server_links)
+            messagebox.showerror("Error", f"No se pudo solicitar la lista de servidores: {e}")
+
+    #     # Crear una cola para almacenar los datos del servidor
+    #     self.server_links_queue = queue.Queue()
+
+    #     def request_links():
+    #         """Hilo para solicitar y procesar la lista de servidores."""
+    #         try:
+    #             # Solicita la lista de servidores
+    #             self.connection.links()
+
+    #             while True:
+    #                 for response in self.connection.receive():
+    #                     prefix, command, params, trailing = parse_message(response)
+
+    #                     if command == "364":
+    #                         server_name = prefix
+    #                         description = trailing
+    #                     # if isinstance(response, tuple) and response[1] == "364":  # Código 364 para LINKS
+    #                     #     server_name = response[2][0]  # Nombre del servidor
+    #                     #     description = response[3]  # Trailing contiene la descripción
+    #                         self.server_links_queue.put(f"{server_name} - {description}")
+    #                     elif command == "365":
+    #                     # elif isinstance(response, tuple) and response[1] == "365":  # Fin de la lista de LINKS
+    #                         break
+    #         except Exception as e:
+    #             self.server_links_queue.put(f"Error: {e}")
+    #         finally:
+    #             # Marca el final de los datos en la cola
+    #             self.server_links_queue.put(None)
+
+    #     # Crear un hilo para la solicitud y el procesamiento
+    #     thread = threading.Thread(target=request_links, daemon=True)
+    #     thread.start()
+
+    #     # Crear la ventana para mostrar los servidores
+    #     servers_window = tk.Toplevel(self)
+    #     servers_window.title(f"Servidores conectados")
+    #     servers_window.geometry("400x400")
+    #     servers_window.configure(bg=self.colors["bg"])
+
+    #     tk.Label(servers_window, text=f"Servidores conectados", font=("Arial", 16, "bold"),
+    #             bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
+
+    #     # Frame para contener la lista y la barra de desplazamiento
+    #     list_frame = tk.Frame(servers_window, bg=self.colors["bg"])
+    #     list_frame.pack(fill="both", expand=True)
+
+    #     scrollbar = tk.Scrollbar(list_frame)
+    #     scrollbar.pack(side="right", fill="y")
+
+    #     self.server_linksbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+    #                                     bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
+    #     self.server_linksbox.pack(side="left", fill="both", expand=True)
+    #     scrollbar.config(command=self.server_linksbox.yview)
+
+    #     # Actualizar la lista de servidores periódicamente
+    #     self.update_server_links()
+
+    # def update_server_links(self):
+    #     """Actualiza la lista de servidores desde la cola."""
+    #     try:
+    #         while not self.server_links_queue.empty():
+    #             server = self.server_links_queue.get()
+    #             if server is None:  # Fin de los datos
+    #                 return
+    #             self.server_linksbox.insert(tk.END, server)
+    #     except Exception as e:
+    #         print(f"Error actualizando lista de servidores: {e}")
+    #     finally:
+    #         # Vuelve a llamar a esta función después de 100 ms
+    #         self.after(100, self.update_server_links)
 
     def close(self):
         self.disconnect_action
@@ -1403,7 +1409,16 @@ class MainView(tk.Tk):
                     server_name = params[2]  # Nombre del servidor
                     version_info = params[1]  # Versión del servidor
                     self.after(0, self._show_server_info, server_name, version_info)  # Mostrar en UI
-                
+
+                # Manejar la respuesta del comando LINKS
+                elif command == "364":  # Respuesta de LINKS (servidor)
+                    server_name = prefix  # El nombre del servidor está en el prefijo
+                    description = trailing  # La descripción está en el trailing
+                    self._add_server_link(server_name, description)  # Añadir a la lista
+
+                elif command == "365":  # Fin de la lista de LINKS
+                    self.after(0, self._show_server_links)  # Mostrar la lista en UI
+
                 else:
 
                     # Comando de inicio del servidor
@@ -1512,6 +1527,49 @@ class MainView(tk.Tk):
     def _show_server_info(self, server_name, version_info):
         """Muestra la información del servidor en un cuadro de diálogo."""
         messagebox.showinfo("Información del Servidor", f"Servidor: {server_name}\nVersión: {version_info}")
+
+    def _add_server_link(self, server_name, description):
+        """Añade un servidor a la lista temporal de servidores."""
+        if not hasattr(self, "temp_server_links"):
+            self.temp_server_links = []  # Lista temporal para almacenar servidores
+        self.temp_server_links.append(f"{server_name} - {description}")
+
+    def _show_server_links(self):
+        """Muestra la lista de servidores en una ventana emergente."""
+        if not hasattr(self, "temp_server_links") or not self.temp_server_links:
+            messagebox.showinfo("Servidores Conectados", "No se encontraron servidores.")
+            return
+
+        # Crear la ventana para mostrar los servidores
+        servers_window = tk.Toplevel(self)
+        servers_window.title("Servidores Conectados")
+        servers_window.geometry("400x400")
+        servers_window.configure(bg=self.colors["bg"])
+
+        tk.Label(servers_window, text="Servidores Conectados", font=("Arial", 16, "bold"),
+                bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
+
+        # Frame para contener la lista y la barra de desplazamiento
+        list_frame = tk.Frame(servers_window, bg=self.colors["bg"])
+        list_frame.pack(fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        server_linksbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
+                                bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
+        server_linksbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=server_linksbox.yview)
+
+        # Añadir servidores a la lista
+        for server in self.temp_server_links:
+            server_linksbox.insert(tk.END, server)
+
+        # Limpiar la lista temporal
+        self.temp_server_links = []
+
+
+
 
 
 # Prueba independiente de la vista principal
