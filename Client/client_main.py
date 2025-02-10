@@ -23,14 +23,43 @@ def execute_command(connection, command, argument, nick):
     Ejecuta un comando específico en la conexión IRC.
     """
     response_patterns = {
-        "/nick": f":.* NICK {argument}",
-        "/join": f":.* JOIN {argument}",
-        "/part": f":.* PART {argument}",
-        "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0]}",
-        "/notice": f":{nick}!.* NOTICE {argument.split()[0]}",
-        "/quit": "ERROR :Closing link",
-        # Añade más comandos según sea necesario
-    }
+    "/nick": f":.* NICK {argument}",
+    "/join": f":.* JOIN {argument}",
+    "/part": f":.* PART {argument}",
+    "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0]}",
+    "/notice": f":{nick}!.* NOTICE {argument.split()[0]}",
+    "/quit": "ERROR :Closing link",
+    "/mode": r" MODE ",
+    "/topic": r" TOPIC ",
+    "/names": r" 353 ",
+    "/list": r" 322 ",
+    "/invite": r" INVITE ",
+    "/kick": r" KICK ",
+    "/who": r" 352 ",
+    "/whois": r" 311 ",
+    "/whowas": r" 314 ",
+    "/oper": r" 381 ",
+    "/kill": r" KILL ",
+    "/wallops": r" WALLOPS ",
+    "/version": r" 351 ",
+    "/stats": r" 248 ",
+    "/links": r" 364 ",
+    "/time": r" 391 ",
+    "/admin": r" 256 ",
+    "/info": r" 371 ",
+    "/trace": r" 200 ",
+    "/connect": r" CONNECT ",
+    "/squit": r" SQUIT ",
+    "/ping": r" PONG ",
+    "/pong": r" PING ",
+    "/away": r" 306 ",
+    "/rehash": r" REHASH ",
+    "/die": r" DIE ",
+    "/restart": r" RESTART ",
+    "/userhost": r" 302 ",
+    "/ison": r" 303 ",
+}
+
 
     try:
         if command in response_patterns:
@@ -141,13 +170,43 @@ def execute_command(connection, command, argument, nick):
     
 def format_response(command, argument, nick, server_response):
     """Convierte la respuesta del servidor al formato esperado por el test."""
+    print(argument)
     mapping = {
         "/nick": f"Tu nuevo apodo es {argument}",
         "/join": f"Te has unido al canal {argument}",
         "/part": f"Has salido del canal {argument}",
-        "/privmsg": f"Mensaje de {nick}: {argument}",
-        "/notice": f"Notificacion de {nick}: {argument}",
+        "/privmsg": f"Mensaje enviado: {argument}",
+        "/notice": f"Notificación de {nick}: {argument}",
         "/quit": "Desconectado del servidor",
+        "/mode": f"Modo cambiado en {argument.split()[0]}",
+        "/topic": f"Tema actualizado en {argument.split()[0]}",
+        "/names": f"Usuarios en {argument}: {server_response.split(':')[-1] if server_response else ''}",
+        "/list": "Lista de canales obtenida",
+        "/invite": f"Invitación enviada a {argument.split()[0]}",
+        # "/kick": f"Usuario {argument.split()[1]} expulsado de {argument.split()[0]}",
+        "/who": f"Información de usuarios obtenida",
+        "/whois": f"Información de {argument}: {server_response.split(':')[-1] if server_response else ''}",
+        "/whowas": f"Historial de {argument}: {server_response.split(':')[-1] if server_response else ''}",
+        "/oper": "Ahora eres un operador de IRC",
+        "/kill": f"Conexión de {argument.split()[0]} terminada",
+        "/wallops": f"Mensaje global enviado: {argument}",
+        "/version": f"Versión del servidor: {server_response.split()[-1] if server_response else ''}",
+        "/stats": "Estadísticas del servidor obtenidas",
+        "/links": "Lista de servidores conectados",
+        "/time": f"Hora del servidor: {server_response.split(':')[-1] if server_response else ''}",
+        "/admin": "Información del administrador obtenida",
+        "/info": "Información del servidor obtenida",
+        "/trace": "Ruta de conexión trazada",
+        "/connect": f"Conectando a {argument.split()[0]}",
+        "/squit": f"Servidor {argument.split()[0]} desconectado",
+        "/ping": "Ping exitoso",
+        "/pong": "Pong enviado",
+        "/away": f"Mensaje de ausencia establecido: {argument}",
+        "/rehash": "Configuración recargada",
+        "/die": "Servidor cerrado",
+        "/restart": "Servidor reiniciado",
+        "/userhost": f"Información de usuario: {server_response.split()[-1] if server_response else ''}",
+        "/ison": f"Usuarios conectados: {server_response.split()[-1] if server_response else ''}",
     }
     return mapping.get(command, "Comando no reconocido")
 
