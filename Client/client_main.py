@@ -176,7 +176,7 @@ def format_response(command, argument, nick, server_response):
         "/join": f"Te has unido al canal {argument}",
         "/part": f"Has salido del canal {argument}",
         "/privmsg": f"Mensaje enviado: {argument}",
-        "/notice": f"Notificación de {nick}: {argument}",
+        "/notice": f"Notificacion de {nick}: {argument}",
         "/quit": "Desconectado del servidor",
         "/mode": f"Modo cambiado en {argument.split()[0] if argument else 'el canal'}",
         "/topic": f"Tema actualizado en {argument.split()[0] if argument else 'el canal'}",
