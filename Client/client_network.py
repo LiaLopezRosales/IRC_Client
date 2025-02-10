@@ -178,6 +178,8 @@ class ClientConnection:
                             sender = line.split('!')[0][1:]  # Obtener el remitente
                             msg_content = line.split(":", 2)[-1]  # Obtener el mensaje
                             print(f"\n[{sender}] {msg_content}")  # Mostrar el mensaje directamente
+                            if message_queue:
+                                message_queue.put(line)
                             continue  # No procesar como respuesta esperada
                         
                         # Detectar si alguien se une a un canal (JOIN)
@@ -187,6 +189,8 @@ class ClientConnection:
                                 user = line.split("!")[0][1:]  # Extrae el nombre de usuario
                                 channel = parts[-1]  # Canal al que se unió
                                 print(f"\n🔹 {user} se ha unido a {channel}")
+                            if message_queue:
+                                message_queue.put(line)
                             continue
 
                         # Detectar si alguien sale de un canal (PART)
@@ -197,6 +201,8 @@ class ClientConnection:
                                 channel = parts[2]  # Canal del que salió
                                 reason = " ".join(parts[3:]).lstrip(":") if len(parts) > 3 else ""
                                 print(f"\n🔸 {user} ha salido de {channel} ({reason})")
+                            if message_queue:
+                                message_queue.put(line)
                             continue
 
                         # Detectar si alguien es expulsado (KICK)
@@ -208,6 +214,8 @@ class ClientConnection:
                                 kicked_user = parts[3]  # Usuario expulsado
                                 reason = " ".join(parts[4:]).lstrip(":") if len(parts) > 4 else ""
                                 print(f"\n❌ {kicked_user} fue expulsado de {channel} por {kicker} ({reason})")
+                            if message_queue:
+                                message_queue.put(line)
                             continue
 
                         # Detectar si el usuario fue invitado a un canal (INVITE)
@@ -218,6 +226,8 @@ class ClientConnection:
                                 invited_user = parts[2]  # Usuario invitado
                                 channel = parts[-1].lstrip(":")  # Canal al que fue invitado
                                 print(f"\n📩 {inviter} ha invitado a {invited_user} a {channel}")
+                            if message_queue:
+                                message_queue.put(line)
                             continue
 
                         if self.command == "/topic":
@@ -230,6 +240,8 @@ class ClientConnection:
                                     self.last_matching_response = line
                                     self.response_received.set()
                                     continue
+                                if message_queue:
+                                    message_queue.put(line)
                         else:
 
                             # Manejar respuestas esperadas

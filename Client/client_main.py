@@ -704,7 +704,7 @@ def format_response(command, argument, nick, server_response):
         "/rehash": "Configuración recargada",
         "/die": "Servidor cerrado",
         "/restart": "Servidor reiniciado",
-        "/servlist": "Lista de servidores vacía",
+        "/servlist": "Lista de servicios vacía",
         "/userhost": f"Información de usuario:\n" + "\n".join(server_response.split(":")[-1].strip().split()) if server_response else "No hay información de usuario.",
         "/ison": f"Usuarios conectados: {' '.join(server_response.split(':')[-1].strip().split())}" if server_response else "No hay usuarios conectados.",
         
