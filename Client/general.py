@@ -337,18 +337,19 @@ class MainView(tk.Tk):
         # Menú emergente
         context_menu = tk.Toplevel(self)
         context_menu.title(f"Opciones para {target}")
-        context_menu.geometry("300x300")
 
-        if target != "Servidor":
-            tk.Label(context_menu, text=f"Opciones para {target}").pack(pady=10)
+        tk.Label(context_menu, text=f"Opciones para {target}").pack(pady=10)
 
         if self.active_target_type == 0:
+            context_menu.geometry("300x370")
+            current_topic = self.get_topic()
             self.channel_topic = tk.Label(
                 context_menu, 
-                text=self.get_topic, 
+                text=current_topic, 
                 font=("Arial", 14, "bold")
             )
             self.channel_topic.pack(pady=5)
+            print(f"el topic al abrir el menu es: {self.get_topic()}" )
             tk.Button(context_menu, text="Cambiar Tema", font=("Arial", 13), command=self.change_topic).pack(pady=5)
             tk.Button(context_menu, text="Expulsar Usuario", font=("Arial", 13), command=self.kick_user).pack(pady=5)
             tk.Button(context_menu, text="Invitar al Canal", font=("Arial", 13), command=self.invite_to_channel).pack(pady=5)
@@ -356,7 +357,11 @@ class MainView(tk.Tk):
             tk.Button(context_menu, text="Mostrar Usuarios", font=("Arial", 13), command=self.check_users).pack(pady=5)
             tk.Button(context_menu, text="Dejar Canal", font=("Arial",13), command=self.quit_channel).pack(pady=5)
         else:
-            tk.Label(context_menu, text=self.get_user_info, font=("Arial", 14, "bold")).pack(pady=5)
+            context_menu.geometry("300x200")
+            # Obtener la info del usuario llamando al método
+            user_info = self.get_user_info()
+            tk.Label(context_menu, text=self.get_user_info(), font=("Arial", 14, "bold")).pack(pady=5)
+            print(f"la info del usuario al abrir el menu es: {self.get_user_info()}" )
             tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
             tk.Button(context_menu, text="Invita a un Canal", font=("Arial", 13), command=self.invite_user).pack(pady=5)
 
@@ -769,6 +774,7 @@ class MainView(tk.Tk):
                 selected_channel = self.channel_list.get(selection[0])
                 self.active_target.set(f"Canal: {selected_channel}")
                 self.active_target_type = 0
+
         elif selected_tab == 1:  # Usuarios
             selection = self.user_list.curselection()
             if selection:
@@ -875,6 +881,8 @@ class MainView(tk.Tk):
                 messagebox.showinfo("Éxito", f"El tema del canal {channel} ha sido actualizado.")
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo cambiar el tema: {e}")
+            finally:
+                self.channels[channel] = {"Topic": topic}
 
         # Crear un hilo para ejecutar el comando
         thread = threading.Thread(target=execute_change_topic, daemon=True)
@@ -1066,13 +1074,22 @@ class MainView(tk.Tk):
 
 
     def get_topic(self):
+        """Obtiene el tema del canal activo."""
         target = self.active_target.get()
-        return self.channels[target]
+        # Si el target es "Canal: #nombre", extrae solo el nombre
+        if "Canal: " in target:
+            channel = target.split("Canal: ")[1]
+            return self.channels.get(channel, {}).get("topic", "Sin tema")
+        return "Sin tema"
 
     def get_user_info(self):
-        """Se obtiene toda la información del usuario con el que se está hablando. Comando whois"""
-        user = self.active_target
-        return self.whois_user(user)
+        """Obtiene la información del usuario usando WHOIS."""
+        target = self.active_target.get()
+        if "Usuario: " in target:
+            user = target.split("Usuario: ")[1]
+            self.whois_user(user)  # Ejecuta el comando WHOIS
+            return self.user_info if hasattr(self, 'user_info') else "Información no disponible"
+        return "Selecciona un usuario"
 
     def other_cmd(self):
         """
@@ -1254,7 +1271,8 @@ class MainView(tk.Tk):
             
                 if command == "322":  # LIST
                     channel = params[1] if len(params) > 1 else params[0]
-                    topic = trailing if trailing else "Sin tema"
+                    # Separar modos y tema (ej: "[+nt] Tema real" -> "Tema real")
+                    topic = trailing.split("]", 1)[-1].strip() if "]" in trailing else trailing
                     self.channels[channel] = {"topic": topic}   
                 elif command == "323":  # Fin de LIST
                     break
@@ -1288,28 +1306,25 @@ class MainView(tk.Tk):
                 continue
 
     def whois_user(self, nick):
-        """Solicita información detallada de un usuario."""
-        info = ""
+        """Solicita información detallada de un usuario y actualiza self.user_info."""
         def execute_whois():
             try:
                 self.connection.whois(nick)
                 while True:
                     try:
                         response = self.server_messages.get(timeout=1)
-                        prefix, command, params, trailing = response
-                        if command == "311":  # WHOIS
-                            nickname = params[1]
+                        prefix, command, params, trailing = parse_message(response)
+                        if command == "311":  # WHOIS respuesta
+                            username = params[1]
                             realname = trailing
-                            info = f"{nickname}: {realname}"
+                            self.user_info = f"Usuario: {username}\nNombre real: {realname}"
                         elif command == "318":  # Fin de WHOIS
                             break
                     except queue.Empty:
                         continue
             except Exception as e:
-                print(f"Error al solicitar WHOIS: {e}")
+                self.user_info = f"Error al obtener información: {e}"
         threading.Thread(target=execute_whois, daemon=True).start()
-        return info
-
 
 
     def start_auto_updates(self):
@@ -1317,7 +1332,22 @@ class MainView(tk.Tk):
         if self.is_connected and self.nick:  # Esperar hasta tener nick
             threading.Thread(target=self.request_channel_list, daemon=True).start()
             threading.Thread(target=self.request_user_list, daemon=True).start()
+            
+            # Obtener la lista actual de canales y usuarios
+            current_channels = set(self.channel_list.get(0, tk.END))  # Obtener todos los canales del Listbox
+            current_users = set(self.user_list.get(0, tk.END))  # Obtener todos los usuarios del Listbox
 
+            # Eliminar usuarios que ya no están en el servidor
+            for user in list(self.all_users):
+                if user not in current_users and user != "Servidor":
+                    self.all_users.remove(user)
+
+            # Eliminar canales que ya no existen
+            for channel in list(self.channels.keys()):
+                if channel not in current_channels and channel != "Servidor":
+                    del self.channels[channel]
+
+            # Limpiar interfaz
             self.channel_list.delete(0, tk.END)
             self.user_list.delete(0, tk.END)
 
@@ -1334,7 +1364,7 @@ class MainView(tk.Tk):
     def process_server_messages(self):
         """Procesa los mensajes del servidor desde la cola."""
         handled_commands = {
-            "PRIVMSG", "NOTICE",  # Manejados en display_message
+            "PRIVMSG", "NOTICE", "NICK" # Manejados en display_message
             # "001", "002", "003", "004", "005",  # Comandos de registro
             # "251", "252", "253", "254", "255", "265", "266",  # Estadísticas
             # "375", "372", "376",  # MOTD
@@ -1348,12 +1378,51 @@ class MainView(tk.Tk):
                 prefix, command, params, trailing = parse_message(raw_message)
                 display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
 
+                print(f"prefix: {prefix}, command: {command}, params: {params}, trailing: {trailing}")
+
                 # Comando de inicio del servidor
                 if command == "001":  # Registro exitoso
                     self.nick = params[0]
                     self.username_label.config(text=self.nick)
+                    # Añadir el propio nick a la lista de usuarios
+                    self.all_users.add(self.nick)
+                    self.user_list.insert(tk.END, self.nick)
                     self.start_auto_updates()  # Iniciar carga de listas
+
+                
+                # Manejar cambio de nick (NICK)
+                if command == "NICK":
+                    old_nick = prefix.split('!')[0] if '!' in prefix else prefix
+                    print(old_nick)
+                    new_nick = trailing    #.strip()
+                    print(new_nick)
                     
+                    # Actualizar lista de usuarios
+                    if old_nick in self.all_users:
+                        self.all_users.remove(old_nick)
+                        self.all_users.add(new_nick)
+                    
+                    # Actualizar interfaz
+                    self.user_list.delete(0, tk.END)
+                    for user in self.all_users:
+                        self.user_list.insert(tk.END, user)
+                    
+                    # Actualizar historial de mensajes
+                    for target in list(self.message_history.keys()):
+                        updated_messages = []
+                        for sender, msg in self.message_history[target]:
+                            if sender == old_nick:
+                                updated_messages.append((new_nick, msg))
+                            else:
+                                updated_messages.append((sender, msg))
+                        self.message_history[target] = updated_messages
+                    
+                    # Actualizar target activo si es afectado
+                    current_target = self.active_target.get()
+                    if current_target == f"Usuario: {old_nick}":
+                        self.active_target.set(f"Usuario: {new_nick}")
+                        self.update_active_target()  # Forzar actualización de la interfaz
+
                 # Comandos PRIVMSG/NOTICE (manejo especial)
                 if command in ["PRIVMSG", "NOTICE"]:
                     if not params:
@@ -1397,6 +1466,11 @@ class MainView(tk.Tk):
     def create_channel(self):
         channel = simpledialog.askstring("Crear Canal", "Nombre del canal (ej. #general):")
         if channel:
+
+            if ' ' in channel:  # Validar espacios
+                messagebox.showerror("Error", "¡Nombre inválido! Los canales no pueden contener espacios.")
+                return 
+        
             if not channel.startswith("#"):
                 channel = f"#{channel}"  
             
@@ -1406,7 +1480,7 @@ class MainView(tk.Tk):
             
             threading.Thread(target=self.connection.join_channel, args=(channel,), daemon=True).start()
 
-            self.channels[channel] = {"topic": "vacío"}
+            self.channels[channel] = {"topic": "sin definir"}
             self.channel_list.insert(tk.END, channel)
 
 
