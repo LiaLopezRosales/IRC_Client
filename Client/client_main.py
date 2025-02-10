@@ -30,7 +30,7 @@ def execute_command(connection, command, argument, nick):
     "/notice": f":{nick}!.* NOTICE {argument.split()[0] if argument else ''}",
     "/quit": "ERROR :Closing link",
     "/mode": r" MODE ",
-    "/topic": r" TOPIC ",
+    "/topic": (r" TOPIC ", r" 331 ", r" 332 "),
     "/names": (r' 353 ', r' 366 '),
     "/list": (r' 322 ', r' 323 '),
     "/invite": r" INVITE ",
@@ -110,7 +110,10 @@ def execute_command(connection, command, argument, nick):
 
 
     try:
-        if command in ["/list", "/names", "/who", "/whois", "/whowas", "/motd", "/lusers", "/servlist", "/users", "/links", "/admin", "/info"]:
+        if command == "/topic":
+            patterns = (r" TOPIC ", r" 331 ", r" 332 ")  # Capturar cambios y consultas de topic
+            connection.set_expected_response(command, patterns, None)
+        elif command in ["/list", "/names", "/who", "/whois", "/whowas", "/motd", "/lusers", "/servlist", "/users", "/links", "/admin", "/info"]:
             pattern, terminator = response_patterns[command]
             connection.set_expected_response(command, pattern, terminator)
         elif command in response_patterns:
@@ -437,7 +440,35 @@ def format_response(command, argument, nick, server_response):
     else:
         time = "No disponible"        
     
-        
+    if command == "/topic":
+        formatted = []
+        if isinstance(server_response, str):  
+            server_response = server_response.split("\r\n")
+
+        for response in server_response:
+            parts = response.split()
+            if len(parts) < 2:
+                continue
+
+            # Respuesta 331: No hay tema establecido
+            if "331" in parts[1]:
+                channel = parts[3]
+                formatted.append(f"El canal {channel} no tiene tema establecido.")
+
+            # Respuesta 332: Tema actual del canal
+            elif "332" in parts[1]:
+                channel = parts[3]
+                topic = " ".join(parts[4:]).lstrip(":")
+                formatted.append(f"Tema de {channel}: {topic}")
+
+            # Comando TOPIC de un usuario (cambio de tema)
+            elif "TOPIC" in parts[1] and "!" in response:
+                user = parts[0].split("!")[0][1:]
+                channel = parts[2]
+                new_topic = " ".join(parts[3:]).lstrip(":")
+                formatted.append(f"{user} ha cambiado el tema de {channel} a: {new_topic}")
+
+        return "\n".join(formatted) if formatted else "No se recibió respuesta del servidor."
 
     
     for response in server_response or []:
@@ -648,7 +679,7 @@ def format_response(command, argument, nick, server_response):
         "/notice": f"Notificacion de {nick}: {argument}",
         "/quit": "Desconectado del servidor",
         "/mode": f"Modo cambiado en {argument.split()[0] if argument else 'el canal'}",
-        "/topic": f"Tema actualizado en {argument.split()[0] if argument else 'el canal'}",
+        # "/topic": f"Tema actualizado en {argument.split()[0] if argument else 'el canal'}",
         "/names": f"Usuarios en {argument}: {server_response.split(':')[-1] if server_response else ''}",
         "/list": "Lista de canales obtenida",
         "/invite": f"Invitación enviada a {argument.split()[0] if argument else 'el usuario'}",
