@@ -219,7 +219,7 @@ class MainView(tk.Tk):
 
         # Formato visual: Izquierda para todos los mensajes
         if sender == "self":
-            formatted_message = f"{wrapped_message}\n"
+            formatted_message = f"Tu: {wrapped_message}\n"
         else:
             formatted_message = f"{sender}: {wrapped_message}\n"
 
@@ -405,59 +405,6 @@ class MainView(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo solicitar la información del servidor: {e}")
 
-        # # Crear una cola para almacenar la información del servidor
-        # self.server_info_queue = queue.Queue()
-
-        # def request_version():
-        #     """Hilo para solicitar y procesar la versión del servidor."""
-        #     try:
-        #         # Solicita la versión del servidor
-        #         self.connection.version()
-
-        #         # # Procesa todas las líneas de respuesta
-        #         # version_found = False
-        #         # for response in self.connection.receive():
-        #         #     if isinstance(response, tuple) and response[1] == "351":  # Código 351 para VERSION
-        #         #         server_name = response[2][2]  # Nombre del servidor
-        #         #         version_info = response[2][1]  # Versión del servidor
-        #         #         self.server_info_queue.put((server_name, version_info))
-        #         #         version_found = True
-        #         #         break  # Una vez encontrada la versión, no seguimos procesando
-        #         # if not version_found:
-        #         #     self.server_info_queue.put(("Error", "No se pudo obtener la versión del servidor."))
-        #     except Exception as e:
-        #         self.server_info_queue.put(("Error", f"No se pudo obtener la información: {e}"))
-        #     finally:
-        #         self.server_info_queue.put(None)  # Fin de los datos
-
-        # # Crear un hilo para la solicitud y el procesamiento
-        # thread = threading.Thread(target=request_version, daemon=True)
-        # thread.start()
-
-        # # Actualizar la información en la interfaz
-        # self.update_server_info()
-
-    # def update_server_info(self):
-    #     """Procesa la información del servidor desde la cola y actualiza la interfaz."""
-    #     try:
-    #         while not self.server_info_queue.empty():
-    #             info = self.server_info_queue.get()
-    #             if info is None:  # Fin de los datos
-    #                 return
-
-    #             # Desempaqueta y muestra la información
-    #             server_name, version_info = info
-    #             if server_name == "Error":
-    #                 messagebox.showerror("Error", version_info)
-    #             else:
-    #                 messagebox.showinfo("Información", f"Servidor: {server_name}\nVersión: {version_info}")
-    #     except Exception as e:
-    #         print(f"Error actualizando la información del servidor: {e}")
-    #     finally:
-    #         # Vuelve a llamar a esta función después de 100 ms
-    #         self.after(100, self.update_server_info)
-
-
     def server_links_action(self):
         """Solicita y muestra la lista de servidores conectados al IRC."""
         if not self.connection:
@@ -470,79 +417,8 @@ class MainView(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo solicitar la lista de servidores: {e}")
 
-    #     # Crear una cola para almacenar los datos del servidor
-    #     self.server_links_queue = queue.Queue()
-
-    #     def request_links():
-    #         """Hilo para solicitar y procesar la lista de servidores."""
-    #         try:
-    #             # Solicita la lista de servidores
-    #             self.connection.links()
-
-    #             while True:
-    #                 for response in self.connection.receive():
-    #                     prefix, command, params, trailing = parse_message(response)
-
-    #                     if command == "364":
-    #                         server_name = prefix
-    #                         description = trailing
-    #                     # if isinstance(response, tuple) and response[1] == "364":  # Código 364 para LINKS
-    #                     #     server_name = response[2][0]  # Nombre del servidor
-    #                     #     description = response[3]  # Trailing contiene la descripción
-    #                         self.server_links_queue.put(f"{server_name} - {description}")
-    #                     elif command == "365":
-    #                     # elif isinstance(response, tuple) and response[1] == "365":  # Fin de la lista de LINKS
-    #                         break
-    #         except Exception as e:
-    #             self.server_links_queue.put(f"Error: {e}")
-    #         finally:
-    #             # Marca el final de los datos en la cola
-    #             self.server_links_queue.put(None)
-
-    #     # Crear un hilo para la solicitud y el procesamiento
-    #     thread = threading.Thread(target=request_links, daemon=True)
-    #     thread.start()
-
-    #     # Crear la ventana para mostrar los servidores
-    #     servers_window = tk.Toplevel(self)
-    #     servers_window.title(f"Servidores conectados")
-    #     servers_window.geometry("400x400")
-    #     servers_window.configure(bg=self.colors["bg"])
-
-    #     tk.Label(servers_window, text=f"Servidores conectados", font=("Arial", 16, "bold"),
-    #             bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
-
-    #     # Frame para contener la lista y la barra de desplazamiento
-    #     list_frame = tk.Frame(servers_window, bg=self.colors["bg"])
-    #     list_frame.pack(fill="both", expand=True)
-
-    #     scrollbar = tk.Scrollbar(list_frame)
-    #     scrollbar.pack(side="right", fill="y")
-
-    #     self.server_linksbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
-    #                                     bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 16))
-    #     self.server_linksbox.pack(side="left", fill="both", expand=True)
-    #     scrollbar.config(command=self.server_linksbox.yview)
-
-    #     # Actualizar la lista de servidores periódicamente
-    #     self.update_server_links()
-
-    # def update_server_links(self):
-    #     """Actualiza la lista de servidores desde la cola."""
-    #     try:
-    #         while not self.server_links_queue.empty():
-    #             server = self.server_links_queue.get()
-    #             if server is None:  # Fin de los datos
-    #                 return
-    #             self.server_linksbox.insert(tk.END, server)
-    #     except Exception as e:
-    #         print(f"Error actualizando lista de servidores: {e}")
-    #     finally:
-    #         # Vuelve a llamar a esta función después de 100 ms
-    #         self.after(100, self.update_server_links)
-
     def close(self):
-        self.disconnect_action
+        # self.disconnect_action
         self.quit
 
     def send_message(self):
@@ -575,7 +451,7 @@ class MainView(tk.Tk):
                     return
 
                 # Actualizar la interfaz con el mensaje enviado
-                self.display_message(f"Tú: {message}", sender="self")  # Mostrar el mensaje en el chat
+                self.display_message(f"{message}", sender="self")  # Mostrar el mensaje en el chat
                 self.message_entry.delete(0, tk.END)
 
                 # Guardar el mensaje en el historial
@@ -709,6 +585,7 @@ class MainView(tk.Tk):
                 self.channels = {"Servidor": {"topic": "Mensajes del servidor"}}
                 self.all_users.clear()
                 self.channel_list.delete(0, tk.END)
+                self.channel_list.insert(tk.END, "Servidor")
                 self.user_list.delete(0, tk.END)
                 self.update_connection_status(False)
                 self.update_buttons()
@@ -779,11 +656,13 @@ class MainView(tk.Tk):
 
     def update_active_target(self, event):
         """Actualiza la cinta superior con el canal o usuario seleccionado."""
+        target = ""
         selected_tab = self.tabs.index(self.tabs.select())  # 0 = Canales, 1 = Usuarios
         if selected_tab == 0:  # Canales
             selection = self.channel_list.curselection()
             if selection:
                 selected_channel = self.channel_list.get(selection[0])
+                target = selected_channel
                 self.active_target.set(f"Canal: {selected_channel}")
                 self.active_target_type = 0
 
@@ -791,9 +670,11 @@ class MainView(tk.Tk):
             selection = self.user_list.curselection()
             if selection:
                 selected_user = self.user_list.get(selection[0])
+                target = selected_user
                 self.active_target.set(f"Usuario: {selected_user}")
                 self.active_target_type = 1
         else:
+            target = "Servidor"
             self.active_target.set("Servidor")
             self.active_target_type = -1
 
@@ -802,7 +683,7 @@ class MainView(tk.Tk):
         self.chat_history.delete(1.0, tk.END)
         
         # Limpiar indicador de nuevos mensajes
-        target = self.active_target.get().replace(" *", "")
+        # target = self.active_target.get().replace(" *", "")
         if target in self.new_message_indicators:
             self.new_message_indicators[target] = False
             self.update_list_item(target, False)
@@ -868,8 +749,6 @@ class MainView(tk.Tk):
         thread = threading.Thread(target=execute_change_mode, daemon=True)
         thread.start()
 
-
-
     def change_topic(self):
         """Muestra un cuadro de diálogo para cambiar el tema del canal."""
         try:
@@ -900,7 +779,6 @@ class MainView(tk.Tk):
         thread = threading.Thread(target=execute_change_topic, daemon=True)
         thread.start()
 
-
     def invite_to_channel(self):
         """Solicita el nombre de un usuario y envía una invitación para unirse al canal activo."""
         try:
@@ -927,7 +805,6 @@ class MainView(tk.Tk):
         thread = threading.Thread(target=execute_invite, daemon=True)
         thread.start()
 
-
     def invite_user(self):
         """Solicita el canal y envía una invitación a un usuario fijo."""
         try:
@@ -953,7 +830,6 @@ class MainView(tk.Tk):
         # Crear un hilo para ejecutar el comando
         thread = threading.Thread(target=execute_invite, daemon=True)
         thread.start()
-
 
     def kick_user(self):
         """Muestra una ventana para expulsar a un usuario de un canal."""
@@ -999,91 +875,6 @@ class MainView(tk.Tk):
         submit_button = tk.Button(kick_window, text="Expulsar", command=call_command)
         submit_button.pack(pady=10)
 
-    # def check_users(self):
-    #     """Solicita y muestra la lista de usuarios en un canal usando el comando NAMES."""
-    #     try:
-    #         # Obtener el canal activo
-    #         channel = self.active_target.get().split("Canal: ")[1]
-    #     except IndexError:
-    #         messagebox.showerror("Error", "Debes seleccionar un canal.")
-    #         return
-
-    #     # Crear una cola para almacenar los usuarios del canal
-    #     self.users_queue = queue.Queue()
-
-    #     def request_names():
-    #         """Hilo para solicitar y procesar la lista de usuarios del canal."""
-    #         try:
-    #             # Enviar el comando NAMES al servidor
-    #             self.connection.names(channel)
-
-    #             # Procesar todas las líneas de respuesta
-    #             users = []
-    #             for response in self.connection.receive():
-    #                 if isinstance(response, tuple) and response[1] == "353":  # Código 353 para NAMES
-    #                     # Los usuarios están en el trailing (última parte del mensaje)
-    #                     users_in_line = response[3].split()
-    #                     users.extend(users_in_line)
-    #                 elif isinstance(response, tuple) and response[1] == "366":  # Fin de NAMES
-    #                     break
-
-    #             # Pasar la lista de usuarios a la cola
-    #             for user in users:
-    #                 self.users_queue.put(user)
-    #             self.users_queue.put(None)  # Fin de los datos
-    #         except Exception as e:
-    #             self.users_queue.put(f"Error: {e}")
-    #             self.users_queue.put(None)  # Fin de los datos en caso de error
-
-    #     # Crear un hilo para ejecutar la solicitud
-    #     thread = threading.Thread(target=request_names, daemon=True)
-    #     thread.start()
-
-    #     # Mostrar la ventana con los usuarios
-    #     self.display_users_window(channel)
-
-    # def display_users_window(self, channel):
-    #     """Muestra una ventana con la lista de usuarios del canal."""
-    #     users_window = tk.Toplevel(self)
-    #     users_window.title(f"Usuarios en {channel}")
-    #     users_window.geometry("300x400")
-    #     users_window.configure(bg=self.colors["bg"])
-
-    #     tk.Label(users_window, text=f"Usuarios en {channel}", font=("Arial", 16, "bold"),
-    #             bg=self.colors["bg"], fg=self.colors["fg"]).pack(pady=10)
-
-    #     # Frame para contener la lista y la barra de desplazamiento
-    #     list_frame = tk.Frame(users_window, bg=self.colors["bg"])
-    #     list_frame.pack(fill="both", expand=True)
-
-    #     # Barra de desplazamiento
-    #     scrollbar = tk.Scrollbar(list_frame)
-    #     scrollbar.pack(side="right", fill="y")
-
-    #     # Listbox para mostrar usuarios
-    #     user_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
-    #                             bg=self.colors["bg"], fg=self.colors["fg"], font=("Arial", 14))
-    #     user_listbox.pack(side="left", fill="both", expand=True)
-    #     scrollbar.config(command=user_listbox.yview)
-
-    #     # Actualizar la lista de usuarios desde la cola
-    #     def update_users():
-    #         try:
-    #             while not self.users_queue.empty():
-    #                 user = self.users_queue.get()
-    #                 if user is None:  # Fin de los datos
-    #                     return
-    #                 elif isinstance(user, str) and user.startswith("Error:"):
-    #                     messagebox.showerror("Error", user[7:])
-    #                 else:
-    #                     user_listbox.insert(tk.END, user)
-    #         except Exception as e:
-    #             print(f"Error actualizando la lista de usuarios: {e}")
-    #         finally:
-    #             self.after(100, update_users)
-
-    #     update_users()
-
     def check_users(self):
         """Solicita la lista de usuarios en un canal usando el comando NAMES."""
         try:
@@ -1098,7 +889,6 @@ class MainView(tk.Tk):
             self.connection.names(channel)
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo solicitar la lista de usuarios: {e}")
-
 
     def get_topic(self):
         """Obtiene el tema del canal activo."""
@@ -1116,15 +906,6 @@ class MainView(tk.Tk):
     #         self.connection.change_topic(channel)
     #     except Exception as e:
     #         messagebox.showerror("Error", f"No se pudo solicitar el tema del canal: {e}")
-
-    # def get_user_info(self):
-    #     """Obtiene la información del usuario usando WHOIS."""
-    #     target = self.active_target.get()
-    #     if "Usuario: " in target:
-    #         user = target.split("Usuario: ")[1]
-    #         self.whois_user(user)  # Ejecuta el comando WHOIS
-    #         return self.user_info if hasattr(self, 'user_info') else "Información no disponible"
-    #     return "Selecciona un usuario"
 
     def get_user_info(self):
         """Solicita la información de un usuario usando WHOIS."""
@@ -1216,7 +997,7 @@ class MainView(tk.Tk):
                 "STATS",
                 # "LINKS", 
                 "TIME", 
-                "CONNECT <target_server> <port>", 
+                # "CONNECT <target_server> <port>", 
                 "SERVLIST [<mask>]",
                 "SQUERY <service_name> <text>", 
                 "TRACE", 
@@ -1259,13 +1040,11 @@ class MainView(tk.Tk):
         cmd_list_button = tk.Button(command_window, text="Comandos ejecutables", command=show_cmd_list)
         cmd_list_button.pack(pady=10)
 
-
     def quit_channel(self):
         channel = self.active_target.split("Canal: ")[1]
         self.connection.part_channel(channel)
         self.active_target = tk.StringVar(value="Ninguno seleccionado")
         
-
     def signal_new_message(self, target):
         """Señaliza que hay nuevos mensajes en el canal/usuario/servidor."""
         if target not in self.new_message_indicators:
@@ -1354,28 +1133,6 @@ class MainView(tk.Tk):
             except queue.Empty:
                 continue
 
-    # def whois_user(self, nick):
-    #     """Solicita información detallada de un usuario y actualiza self.user_info."""
-    #     def execute_whois():
-    #         try:
-    #             self.connection.whois(nick)
-    #             while True:
-    #                 try:
-    #                     response = self.server_messages.get(timeout=1)
-    #                     prefix, command, params, trailing = parse_message(response)
-    #                     if command == "311":  # WHOIS respuesta
-    #                         username = params[1]
-    #                         realname = trailing
-    #                         self.user_info = f"Usuario: {username}\nNombre real: {realname}"
-    #                     elif command == "318":  # Fin de WHOIS
-    #                         break
-    #                 except queue.Empty:
-    #                     continue
-    #         except Exception as e:
-    #             self.user_info = f"Error al obtener información: {e}"
-    #     threading.Thread(target=execute_whois, daemon=True).start()
-
-
     def start_auto_updates(self):
         """Inicia la carga inicial y actualizaciones periódicas de canales/usuarios."""
         if self.is_connected and self.nick:  # Esperar hasta tener nick
@@ -1414,9 +1171,6 @@ class MainView(tk.Tk):
         """Procesa los mensajes del servidor desde la cola."""
         handled_commands = {
             "PRIVMSG", "NOTICE", "NICK" # Manejados en display_message
-            # "001", "002", "003", "004", "005",  # Comandos de registro
-            # "251", "252", "253", "254", "255", "265", "266",  # Estadísticas
-            # "375", "372", "376",  # MOTD
             "322", "323", "315", "352", "311", "318", "364", "365", "351", "353", "366"  # Listas
         }
 
@@ -1427,9 +1181,7 @@ class MainView(tk.Tk):
                 prefix, command, params, trailing = parse_message(raw_message)
                 display_text = f"{prefix} {command} {' '.join(params)} :{trailing}"
 
-                print(f"prefix: {prefix}, command: {command}, params: {params}, trailing: {trailing}")
-
-                print(f"[DEBUG] Comando: {command}, Params: {params}, Trailing: {trailing}")  # Depuración
+                print(f"[DEBUG] Prefix: {prefix}, Comando: {command}, Params: {params}, Trailing: {trailing}")  # Depuración
 
                 # Redirigir respuestas específicas a colas dedicadas
                 if command in ["322", "323"]:  # Respuestas de LIST
@@ -1478,18 +1230,7 @@ class MainView(tk.Tk):
 
                 elif command == "318":  # Fin de WHOIS
                     continue
-                #     if hasattr(self, "user_info"):
-                #         self.after(0, self._show_user_info)  # Mostrar la información en UI
-                #     else:
-                #         self.after(0, messagebox.showinfo, "Información del Usuario", "No se encontró información.")
-                        
-                # # Manejar la respuesta del comando WHOIS (311)
-                # if command == "311":  # WHOIS respuesta
-                #     username = params[1]  # Nombre de usuario
-                #     realname = trailing  # Nombre real
-                #     self.context_menu_info = f"Usuario: {username}\nNombre real: {realname}"
-                #     self.after(0, self._update_context_menu)  # Actualizar el menú contextual
-
+                
                 # # Manejar la respuesta del comando TOPIC (332)
                 # if command == "332":  # TOPIC respuesta
                 #     channel = params[1]  # Canal
@@ -1677,14 +1418,6 @@ class MainView(tk.Tk):
 
         # Limpiar la lista temporal del canal
         del self.temp_channel_users[channel]
-
-    # def _show_user_info(self):
-    #     """Muestra la información del usuario en un cuadro de diálogo."""
-    #     if hasattr(self, "user_info"):
-    #         messagebox.showinfo("Información del Usuario", self.user_info)
-    #         del self.user_info  # Limpiar la información después de mostrarla
-    #     else:
-    #         messagebox.showinfo("Información del Usuario", "No se encontró información.")
 
     def _update_context_menu(self):
         """Actualiza la información en el menú contextual."""
