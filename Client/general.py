@@ -351,7 +351,6 @@ class MainView(tk.Tk):
                 font=("Arial", 14, "bold")
             )
             self.channel_topic.pack(pady=5)
-            print(f"el topic al abrir el menu es: {self.get_topic()}" )
             tk.Button(context_menu, text="Cambiar Tema", font=("Arial", 13), command=self.change_topic).pack(pady=5)
             tk.Button(context_menu, text="Expulsar Usuario", font=("Arial", 13), command=self.kick_user).pack(pady=5)
             tk.Button(context_menu, text="Invitar al Canal", font=("Arial", 13), command=self.invite_to_channel).pack(pady=5)
@@ -361,9 +360,8 @@ class MainView(tk.Tk):
         else:
             context_menu.geometry("300x200")
             # Obtener la info del usuario llamando al método
-            user_info = self.get_user_info()
-            tk.Label(context_menu, text=self.get_user_info(), font=("Arial", 14, "bold")).pack(pady=5)
-            print(f"la info del usuario al abrir el menu es: {self.get_user_info()}" )
+            self.get_user_info()
+            tk.Label(context_menu, text=self.user_info, font=("Arial", 14, "bold")).pack(pady=5)
             tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
             tk.Button(context_menu, text="Invita a un Canal", font=("Arial", 13), command=self.invite_user).pack(pady=5)
 
@@ -1111,14 +1109,34 @@ class MainView(tk.Tk):
             return self.channels.get(channel, {}).get("topic", "Sin tema")
         return "Sin tema"
 
+    # def get_topic(self):
+    #     """Solicita el tema del canal usando el comando TOPIC."""
+    #     try:
+    #         channel = self.active_target.get()
+    #         self.connection.change_topic(channel)
+    #     except Exception as e:
+    #         messagebox.showerror("Error", f"No se pudo solicitar el tema del canal: {e}")
+
+    # def get_user_info(self):
+    #     """Obtiene la información del usuario usando WHOIS."""
+    #     target = self.active_target.get()
+    #     if "Usuario: " in target:
+    #         user = target.split("Usuario: ")[1]
+    #         self.whois_user(user)  # Ejecuta el comando WHOIS
+    #         return self.user_info if hasattr(self, 'user_info') else "Información no disponible"
+    #     return "Selecciona un usuario"
+
     def get_user_info(self):
-        """Obtiene la información del usuario usando WHOIS."""
+        """Solicita la información de un usuario usando WHOIS."""
         target = self.active_target.get()
         if "Usuario: " in target:
             user = target.split("Usuario: ")[1]
-            self.whois_user(user)  # Ejecuta el comando WHOIS
-            return self.user_info if hasattr(self, 'user_info') else "Información no disponible"
-        return "Selecciona un usuario"
+            try:
+                self.connection.whois(user)  # Enviar el comando WHOIS
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo solicitar la información del usuario: {e}")
+        else:
+            messagebox.showwarning("Error", "Selecciona un usuario primero.")
 
     def other_cmd(self):
         """
@@ -1336,26 +1354,26 @@ class MainView(tk.Tk):
             except queue.Empty:
                 continue
 
-    def whois_user(self, nick):
-        """Solicita información detallada de un usuario y actualiza self.user_info."""
-        def execute_whois():
-            try:
-                self.connection.whois(nick)
-                while True:
-                    try:
-                        response = self.server_messages.get(timeout=1)
-                        prefix, command, params, trailing = parse_message(response)
-                        if command == "311":  # WHOIS respuesta
-                            username = params[1]
-                            realname = trailing
-                            self.user_info = f"Usuario: {username}\nNombre real: {realname}"
-                        elif command == "318":  # Fin de WHOIS
-                            break
-                    except queue.Empty:
-                        continue
-            except Exception as e:
-                self.user_info = f"Error al obtener información: {e}"
-        threading.Thread(target=execute_whois, daemon=True).start()
+    # def whois_user(self, nick):
+    #     """Solicita información detallada de un usuario y actualiza self.user_info."""
+    #     def execute_whois():
+    #         try:
+    #             self.connection.whois(nick)
+    #             while True:
+    #                 try:
+    #                     response = self.server_messages.get(timeout=1)
+    #                     prefix, command, params, trailing = parse_message(response)
+    #                     if command == "311":  # WHOIS respuesta
+    #                         username = params[1]
+    #                         realname = trailing
+    #                         self.user_info = f"Usuario: {username}\nNombre real: {realname}"
+    #                     elif command == "318":  # Fin de WHOIS
+    #                         break
+    #                 except queue.Empty:
+    #                     continue
+    #         except Exception as e:
+    #             self.user_info = f"Error al obtener información: {e}"
+    #     threading.Thread(target=execute_whois, daemon=True).start()
 
 
     def start_auto_updates(self):
@@ -1452,7 +1470,35 @@ class MainView(tk.Tk):
                     self.user_list.insert(tk.END, self.nick)
                     self.start_auto_updates()  # Iniciar carga de listas
 
-                
+                # Manejar la respuesta del comando WHOIS
+                if command == "311":  # Respuesta de WHOIS (información del usuario)
+                    username = params[1]  # Nombre de usuario
+                    realname = trailing  # Nombre real
+                    self.user_info = f"Usuario: {username}\nNombre real: {realname}"
+
+                elif command == "318":  # Fin de WHOIS
+                    continue
+                #     if hasattr(self, "user_info"):
+                #         self.after(0, self._show_user_info)  # Mostrar la información en UI
+                #     else:
+                #         self.after(0, messagebox.showinfo, "Información del Usuario", "No se encontró información.")
+                        
+                # # Manejar la respuesta del comando WHOIS (311)
+                # if command == "311":  # WHOIS respuesta
+                #     username = params[1]  # Nombre de usuario
+                #     realname = trailing  # Nombre real
+                #     self.context_menu_info = f"Usuario: {username}\nNombre real: {realname}"
+                #     self.after(0, self._update_context_menu)  # Actualizar el menú contextual
+
+                # # Manejar la respuesta del comando TOPIC (332)
+                # if command == "332":  # TOPIC respuesta
+                #     channel = params[1]  # Canal
+                #     topic = trailing  # Tema del canal
+                #     # self.context_menu_info = f"Tema del canal {channel}: {topic}"
+                #     self.current_topic = f"Tema del canal {channel}: {topic}"
+                #     # self.after(0, self._update_context_menu)  # Actualizar el menú contextual
+
+
                 # Manejar cambio de nick (NICK)
                 if command == "NICK":
                     old_nick = prefix.split('!')[0] if '!' in prefix else prefix
@@ -1632,6 +1678,20 @@ class MainView(tk.Tk):
         # Limpiar la lista temporal del canal
         del self.temp_channel_users[channel]
 
+    # def _show_user_info(self):
+    #     """Muestra la información del usuario en un cuadro de diálogo."""
+    #     if hasattr(self, "user_info"):
+    #         messagebox.showinfo("Información del Usuario", self.user_info)
+    #         del self.user_info  # Limpiar la información después de mostrarla
+    #     else:
+    #         messagebox.showinfo("Información del Usuario", "No se encontró información.")
+
+    def _update_context_menu(self):
+        """Actualiza la información en el menú contextual."""
+        if hasattr(self, "context_menu"):
+            for widget in self.context_menu.winfo_children():
+                if isinstance(widget, tk.Label):
+                    widget.config(text=self.context_menu_info)
 
 
 # Prueba independiente de la vista principal
