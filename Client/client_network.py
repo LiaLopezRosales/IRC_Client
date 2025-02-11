@@ -98,19 +98,18 @@ class ClientConnection:
         else:
             self.command = command
             self.expected_response = pattern
-            self.response_terminator = terminator  # Ej: r'End of \w+'
+            self.response_terminator = terminator 
             self.multi_response_buffer = []
             self.response_received.clear()  # Reinicia el evento
 
     def wait_for_response(self, timeout=5):
         """Espera hasta recibir una respuesta que coincida con el patrón."""
-        #print(f"1 {self.expected_response}")
         if self.response_received.wait(timeout=timeout):
             if self.response_terminator:
                 return self.multi_response_buffer if self.multi_response_buffer else []
             return [self.last_matching_response] if self.last_matching_response else []
         
-        return []  # En lugar de None, devolver lista vacía
+        return [] 
 
     def connect_client(self,password,nick,real_name, retries=3, delay=2):
         for attempt in range(retries):
@@ -235,7 +234,6 @@ class ClientConnection:
 
                         if self.command == "/topic":
                             if any(code in line for code in self.expected_response):
-                                #print(f"Coincidencia con expected_response para {self.command}: {line}")
                                 self.multi_response_buffer.append(line)
 
                                 # Si no hay terminador, es una respuesta de una sola línea y se almacena
@@ -250,14 +248,11 @@ class ClientConnection:
                             # Manejar respuestas esperadas
                             if self.command in expected_codes:
                                 if any(code in line for code in expected_codes[self.command]):
-                                    #print(f"Coincidencia con expected_response para {self.command}: {line}")
                                     self.multi_response_buffer.append(line)
                                 if self.response_terminator and self.response_terminator in line:
-                                    #print(f"Fin de respuesta múltiple detectado: {line}")
                                     self.response_received.set()
                             else:
                                 if self.expected_response and self.expected_response in line:
-                                    #print(f"Coincidencia con expected_response: {self.expected_response}")
                                     self.multi_response_buffer.append(line)  # Almacenar la línea correctamente
 
                                     # Si no hay terminador, significa que es una respuesta de una sola línea
@@ -268,7 +263,6 @@ class ClientConnection:
 
                                 # Si llega el terminador (`366` para /NAMES, `315` para /WHO), finaliza la respuesta múltiple
                                 if self.response_terminator and self.response_terminator in line:
-                                    #print(f"Fin de respuesta múltiple detectado: {line}")
                                     self.response_received.set()
 
 
@@ -384,7 +378,6 @@ class ClientConnection:
         Envía un PONG al servidor en respuesta a un PING.
         """
         self.send("PONG", [server_name])
-        #print(f"[CLIENTE] PONG enviado al servidor: {server_name}")
 
     def close(self):
         if self.is_connected:
