@@ -435,7 +435,7 @@ class MainView(tk.Tk):
             messagebox.showwarning("Mensaje vacío", "No puedes enviar un mensaje vacío.")
             return
         
-        if target == "Servidor":
+        if target == "Canal: Servidor":
             messagebox.showwarning("mensaje a servidor", "No se le pueden pasar mensajes directos al servidor")
             return
         
