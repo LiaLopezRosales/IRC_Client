@@ -42,12 +42,12 @@ def execute_command(connection, command, argument, nick):
     "/kill": r" KILL ",
     "/wallops": r" WALLOPS ",
     "/version": r" 351 ",
-    "/stats": r" 248 ",
+    "/stats": (r' 249 ', r' 219 '),
     "/links": (r' 364 ', r' 365 '),
     "/time": r" 391 ",
     "/admin": (r' 256 ', r' 259 '),
     "/info": (r' 371 ', r' 374 '),
-    "/trace": r" 200 ",
+    "/trace": (r' 200 ', r' 262 '),
     "/connect": r" CONNECT ",
     "/squit": r" SQUIT ",
     "/ping": r" PONG ",
@@ -113,7 +113,7 @@ def execute_command(connection, command, argument, nick):
         if command == "/topic":
             patterns = (r" TOPIC ", r" 331 ", r" 332 ")  # Capturar cambios y consultas de topic
             connection.set_expected_response(command, patterns, None)
-        elif command in ["/list", "/names", "/who", "/whois", "/whowas", "/motd", "/lusers", "/servlist", "/users", "/links", "/admin", "/info"]:
+        elif command in ["/list", "/names", "/who", "/whois", "/whowas", "/motd", "/lusers", "/servlist", "/users", "/links", "/admin", "/info", "/stats", "/trace"]:
             pattern, terminator = response_patterns[command]
             connection.set_expected_response(command, pattern, terminator)
         elif command in response_patterns:
@@ -458,14 +458,17 @@ def format_response(command, argument, nick, server_response):
 
         elif command == "/info":
             formatted = []
-            if isinstance(server_response, str):  
-                server_response = server_response.split("\r\n")  # Asegurar que se divida en líneas correctamente
-                
-            for response in server_response:
-                if " 371 " in response:
-                        formatted.append(response)
+            if isinstance(server_response, str):
+                server_response = server_response.split("\r\n")
 
-            return "\n".join(formatted) if formatted else "No se encontraron canales."
+            for response in server_response:
+                #print(f"Procesando línea de INFO: {response}")  # Depuración
+                parts = response.split(":", 2)
+                if len(parts) > 2:
+                    formatted.append(parts[2].strip())  # Extrae solo el contenido útil
+
+            return "Información del servidor:\n" + "\n".join(formatted) if formatted else "No hay información del servidor disponible."
+        
         elif command == "/names":
             formatted = []
             if isinstance(server_response, str):  
@@ -492,8 +495,8 @@ def format_response(command, argument, nick, server_response):
                     if len(parts) >= 10:
                         username = parts[7]
                         channel = parts[3]
-                        ip = parts[4]
-                        real_name = " ".join(parts[9:])  # Captura el nombre real al final
+                        ip = parts[5]
+                        real_name = " ".join(parts[9:]).lstrip(":")  # Captura el nombre real al final
                         formatted.append(f"Usuario: {username} - Canal: {channel} - IP: {ip} - Nombre: {real_name}")
 
             return "\n".join(formatted) if formatted else "No se encontraron usuarios."
@@ -556,16 +559,16 @@ def format_response(command, argument, nick, server_response):
         
         elif command == "/admin":
             formatted = []
-            if isinstance(server_response, str):  
+            if isinstance(server_response, str):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
                 #print(f"Procesando línea de ADMIN: {response}")  # Depuración
-                parts = response.split(":", 1)  # Separa por `:` para extraer la información
-                if len(parts) > 1:
-                    formatted.append(parts[1].strip())  # Guarda solo la parte importante
+                parts = response.split(":", 2)  # Asegura que no se pierde información después del primer ":"
+                if len(parts) > 2:
+                    formatted.append(parts[2].strip())  # Extrae solo la información relevante
 
-            return "\n".join(formatted) if formatted else "No hay información de administración."
+            return "Información del administrador:\n" + "\n".join(formatted) if formatted else "No hay información administrativa disponible."
         
         elif command == "/motd":
             formatted = []
@@ -598,16 +601,16 @@ def format_response(command, argument, nick, server_response):
         
         elif command == "/lusers":
             formatted = []
-            if isinstance(server_response, str):  
+            if isinstance(server_response, str):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
                 #print(f"Procesando línea de LUSERS: {response}")  # Depuración
-                parts = response.split(":", 1)  # Separa por `:` para extraer la información
-                if len(parts) > 1:
-                    formatted.append(parts[1].strip())
+                parts = response.split(":", 2)
+                if len(parts) > 2:
+                    formatted.append(parts[2].strip())  # Extrae los datos relevantes
 
-            return "Estadísticas del servidor:\n" + "\n".join(formatted) if formatted else "No hay información de usuarios."
+            return "Estadísticas del servidor:\n" + "\n".join(formatted) if formatted else "No se encontraron estadísticas."
         
         elif command == "/servlist":
             formatted = []
@@ -623,6 +626,68 @@ def format_response(command, argument, nick, server_response):
                     formatted.append(f"Servicio: {service_name} - Descripción: {description}")
 
             return "\n".join(formatted) if formatted else "No hay servicios disponibles."
+        
+        elif command == "/stats":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\r\n")  # Asegurar que se divida correctamente
+
+            for response in server_response:
+                #print(f"Procesando línea de STATS: {response}")  # Depuración
+                parts = response.split()
+                if len(parts) < 2:
+                    continue
+                
+                # Diferentes tipos de respuestas de STATS
+                if "211" in parts[1]:  # Estadísticas de tráfico
+                    formatted.append(f"Estadísticas de tráfico: {' '.join(parts[2:])}")
+                elif "212" in parts[1]:  # Estadísticas de comandos
+                    formatted.append(f"Estadísticas de comando {parts[2]}: {' '.join(parts[3:])}")
+                elif "219" in parts[1]:  # Fin de la lista de estadísticas
+                    formatted.append("Fin de las estadísticas.")
+                elif "249" in parts[1]:  # Información adicional
+                    formatted.append(f"Información adicional: {' '.join(parts[2:])}")
+
+            return "\n".join(formatted) if formatted else "No hay estadísticas disponibles."
+
+        elif command == "/trace":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\r\n")  
+
+            for response in server_response:
+                #print(f"Procesando línea de TRACE: {response}")  # Depuración
+                parts = response.split()
+                if len(parts) < 2:
+                    continue
+                
+                if parts[1] in ["200", "201", "202", "203", "204", "205", "206", "208", "261", "262"]:
+                    formatted.append(f"Ruta de conexión: {' '.join(parts[2:])}")
+
+            return "\n".join(formatted) if formatted else "No se encontró información de trazado."
+
+        elif command == "/users":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\r\n")  
+
+            for response in server_response:
+                #print(f"Procesando línea de USERS: {response}")  # Depuración
+                parts = response.split()
+                if len(parts) < 2:
+                    continue
+
+                if "392" in parts[1]:  # Inicio de la lista de usuarios
+                    formatted.append("Usuarios conectados:")
+                elif "393" in parts[1]:  # Información de usuario
+                    formatted.append(f"Usuario: {' '.join(parts[2:])}")
+                elif "394" in parts[1]:  # Información adicional de usuario
+                    formatted.append(f"Detalles: {' '.join(parts[2:])}")
+                elif "395" in parts[1]:  # Fin de la lista de usuarios
+                    formatted.append("Fin de la lista de usuarios.")
+
+            return "\n".join(formatted) if formatted else "No se encontraron usuarios conectados."
+
                 
     mapping = {
         "/nick": f"Tu nuevo apodo es {argument}",
