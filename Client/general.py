@@ -352,6 +352,7 @@ class MainView(tk.Tk):
             )
             self.channel_topic.pack(pady=5)
             tk.Button(context_menu, text="Cambiar Tema", font=("Arial", 13), command=self.change_topic).pack(pady=5)
+            tk.Button(context_menu, text="Unirse al Canal", font=("Arial",13), command=self.join_channel).pack(pady=5)
             tk.Button(context_menu, text="Expulsar Usuario", font=("Arial", 13), command=self.kick_user).pack(pady=5)
             tk.Button(context_menu, text="Invitar al Canal", font=("Arial", 13), command=self.invite_to_channel).pack(pady=5)
             tk.Button(context_menu, text="Cambiar Modo", font=("Arial", 13), command=self.change_mode).pack(pady=5)
@@ -663,6 +664,11 @@ class MainView(tk.Tk):
             if selection:
                 selected_channel = self.channel_list.get(selection[0])
                 target = selected_channel
+
+                # Mantener el historial existente si el target no cambia
+                if target == self.active_target.get():
+                    return
+                
                 self.active_target.set(f"Canal: {selected_channel}")
                 self.active_target_type = 0
 
@@ -671,22 +677,33 @@ class MainView(tk.Tk):
             if selection:
                 selected_user = self.user_list.get(selection[0])
                 target = selected_user
+                
+                # Mantener el historial existente si el target no cambia
+                if target == self.active_target.get():
+                    return
+                
                 self.active_target.set(f"Usuario: {selected_user}")
                 self.active_target_type = 1
         else:
             target = "Servidor"
+
+            # Mantener el historial existente si el target no cambia
+            if target == self.active_target.get():
+                return
+            
             self.active_target.set("Servidor")
             self.active_target_type = -1
+
 
         # Limpiar el historial de chat actual
         self.chat_history.config(state="normal")
         self.chat_history.delete(1.0, tk.END)
         
         # Limpiar indicador de nuevos mensajes
-        # target = self.active_target.get().replace(" *", "")
-        if target in self.new_message_indicators:
-            self.new_message_indicators[target] = False
-            self.update_list_item(target, False)
+        # # target = self.active_target.get().replace(" *", "")
+        # if target in self.new_message_indicators:
+        #     self.new_message_indicators[target] = False
+        #     self.update_list_item(target, False)
 
         # Mostrar mensajes del historial para el canal/usuario seleccionado
         if target in self.message_history:
@@ -1040,43 +1057,63 @@ class MainView(tk.Tk):
         cmd_list_button = tk.Button(command_window, text="Comandos ejecutables", command=show_cmd_list)
         cmd_list_button.pack(pady=10)
 
+    # def quit_channel(self):
+    #     channel = self.active_target.split("Canal: ")[1]
+    #     self.connection.part_channel(channel)
+    #     self.active_target = tk.StringVar(value="Ninguno seleccionado")
+
     def quit_channel(self):
-        channel = self.active_target.split("Canal: ")[1]
-        self.connection.part_channel(channel)
-        self.active_target = tk.StringVar(value="Ninguno seleccionado")
-        
-    def signal_new_message(self, target):
-        """Señaliza que hay nuevos mensajes en el canal/usuario/servidor."""
-        if target not in self.new_message_indicators:
-            self.new_message_indicators[target] = True
+        """Abandona el canal actual sin eliminarlo del servidor."""
+        # Obtener el nombre del canal desde active_target
+        channel = self.active_target.get().split("Canal: ")[1]  # Obtener el valor de StringVar y dividirlo
 
-        # Actualizar solo el elemento específico en la lista
-        if target == "servidor":
-            self.update_list_item("Servidor", self.new_message_indicators["servidor"])
-        else:
-            self.update_list_item(target, self.new_message_indicators[target])
+        def send_part_message():
+            """Envía el mensaje PART al servidor."""
+            try:
+                self.connection.part_channel(channel)  # Enviar el comando PART al servidor
+                print(f"Has salido del canal: {channel}")  # Mensaje de confirmación en consola
+            except Exception as e:
+                print(f"Error al salir del canal {channel}: {e}")  # Manejo de errores
 
-    def update_list_item(self, item, has_new_message):
-        """Actualiza un elemento específico en la lista de canales o usuarios."""
-        # Buscar el elemento en la lista de canales
-        for i in range(self.channel_list.size()):
-            if self.channel_list.get(i).replace(" *", "") == item:
-                display_name = item
-                if has_new_message:
-                    display_name += " *"
-                self.channel_list.delete(i)
-                self.channel_list.insert(i, display_name)
-                return
+        # Crear un hilo para ejecutar el comando
+        thread = threading.Thread(target=send_part_message, daemon=True)
+        thread.start()
 
-        # Buscar el elemento en la lista de usuarios
-        for i in range(self.user_list.size()):
-            if self.user_list.get(i).replace(" *", "") == item:
-                display_name = item
-                if has_new_message:
-                    display_name += " *"
-                self.user_list.delete(i)
-                self.user_list.insert(i, display_name)
-                return     
+
+
+
+    # def signal_new_message(self, target):
+    #     """Señaliza que hay nuevos mensajes en el canal/usuario/servidor."""
+    #     if target not in self.new_message_indicators:
+    #         self.new_message_indicators[target] = True
+
+    #     # Actualizar solo el elemento específico en la lista
+    #     if target == "servidor":
+    #         self.update_list_item("Servidor", self.new_message_indicators["servidor"])
+    #     else:
+    #         self.update_list_item(target, self.new_message_indicators[target])
+
+    # def update_list_item(self, item, has_new_message):
+    #     """Actualiza un elemento específico en la lista de canales o usuarios."""
+    #     # Buscar el elemento en la lista de canales
+    #     for i in range(self.channel_list.size()):
+    #         if self.channel_list.get(i).replace(" *", "") == item:
+    #             display_name = item
+    #             if has_new_message:
+    #                 display_name += " *"
+    #             self.channel_list.delete(i)
+    #             self.channel_list.insert(i, display_name)
+    #             return
+
+    #     # Buscar el elemento en la lista de usuarios
+    #     for i in range(self.user_list.size()):
+    #         if self.user_list.get(i).replace(" *", "") == item:
+    #             display_name = item
+    #             if has_new_message:
+    #                 display_name += " *"
+    #             self.user_list.delete(i)
+    #             self.user_list.insert(i, display_name)
+    #             return     
 
     def request_channel_list(self):
         """Solicita la lista de canales (comando LIST)."""
@@ -1133,39 +1170,78 @@ class MainView(tk.Tk):
             except queue.Empty:
                 continue
 
+    # def start_auto_updates(self):
+    #     """Inicia la carga inicial y actualizaciones periódicas de canales/usuarios."""
+    #     if self.is_connected and self.nick:  # Esperar hasta tener nick
+    #         threading.Thread(target=self.request_channel_list, daemon=True).start()
+    #         threading.Thread(target=self.request_user_list, daemon=True).start()
+            
+    #         # Obtener la lista actual de canales y usuarios
+    #         current_channels = set(self.channel_list.get(0, tk.END))  # Obtener todos los canales del Listbox
+    #         current_users = set(self.user_list.get(0, tk.END))  # Obtener todos los usuarios del Listbox
+
+    #         # Eliminar usuarios que ya no están en el servidor
+    #         for user in list(self.all_users):
+    #             if user not in current_users and user != "Servidor":
+    #                 self.all_users.remove(user)
+
+    #         # Eliminar canales que ya no existen
+    #         for channel in list(self.channels.keys()):
+    #             if channel not in current_channels and channel != "Servidor":
+    #                 del self.channels[channel]
+
+    #         # Limpiar interfaz
+    #         self.channel_list.delete(0, tk.END)
+    #         self.user_list.delete(0, tk.END)
+
+    #         # Agregar elementos de las listas
+    #         for channel, topic in self.channels.items():
+    #             self.channel_list.insert(tk.END, channel)
+
+    #         for user in self.all_users:
+    #             self.user_list.insert(tk.END, user)
+
+
+    #     self.after(60000, self.start_auto_updates)
+
     def start_auto_updates(self):
-        """Inicia la carga inicial y actualizaciones periódicas de canales/usuarios."""
-        if self.is_connected and self.nick:  # Esperar hasta tener nick
+        """Actualiza las listas de canales y usuarios de forma incremental."""
+        if self.is_connected and self.nick:
             threading.Thread(target=self.request_channel_list, daemon=True).start()
             threading.Thread(target=self.request_user_list, daemon=True).start()
-            
-            # Obtener la lista actual de canales y usuarios
-            current_channels = set(self.channel_list.get(0, tk.END))  # Obtener todos los canales del Listbox
-            current_users = set(self.user_list.get(0, tk.END))  # Obtener todos los usuarios del Listbox
 
-            # Eliminar usuarios que ya no están en el servidor
-            for user in list(self.all_users):
-                if user not in current_users and user != "Servidor":
-                    self.all_users.remove(user)
+            # Procesar canales
+            current_channels = set(self.channel_list.get(0, tk.END))
+            new_channels = set(self.channels.keys()) | {"Servidor"}  # Siempre incluir "Servidor"
 
-            # Eliminar canales que ya no existen
-            for channel in list(self.channels.keys()):
-                if channel not in current_channels and channel != "Servidor":
-                    del self.channels[channel]
+            # Eliminar canales que ya no existen (excepto "Servidor")
+            for channel in current_channels - new_channels:
+                if channel != "Servidor":
+                    idx = self.channel_list.get(0, tk.END).index(channel)
+                    self.channel_list.delete(idx)
 
-            # Limpiar interfaz
-            self.channel_list.delete(0, tk.END)
-            self.user_list.delete(0, tk.END)
+            # Añadir nuevos canales (sin duplicados)
+            for channel in new_channels - current_channels:
+                if channel not in self.channel_list.get(0, tk.END):
+                    self.channel_list.insert(tk.END, channel)
 
-            # Agregar elementos de las listas
-            for channel, topic in self.channels.items():
-                self.channel_list.insert(tk.END, channel)
+            # Procesar usuarios
+            current_users = set(self.user_list.get(0, tk.END))
+            new_users = self.all_users | {self.nick}  # Incluir "Servidor" si aplica
 
-            for user in self.all_users:
-                self.user_list.insert(tk.END, user)
+            # Eliminar usuarios que ya no están
+            for user in current_users - new_users:
+                if user != "Servidor":
+                    idx = self.user_list.get(0, tk.END).index(user)
+                    self.user_list.delete(idx)
 
+            # Añadir nuevos usuarios (sin duplicados)
+            for user in new_users - current_users:
+                if user not in self.user_list.get(0, tk.END):
+                    self.user_list.insert(tk.END, user)
 
         self.after(60000, self.start_auto_updates)
+
 
     def process_server_messages(self):
         """Procesa los mensajes del servidor desde la cola."""
@@ -1253,56 +1329,72 @@ class MainView(tk.Tk):
                         self.all_users.add(new_nick)
                     
                     # Actualizar interfaz
-                    self.user_list.delete(0, tk.END)
-                    for user in self.all_users:
-                        self.user_list.insert(tk.END, user)
+                    # self.user_list.delete(0, tk.END)
+                    # for user in self.all_users:
+                    #     self.user_list.insert(tk.END, user)
+
+                    try:
+                        index = self.user_list.get(0, tk.END).index(old_nick)  # Encuentra el índice del viejo nick
+                        self.user_list.delete(index)  # Elimina el viejo nick
+                        self.user_list.insert(index, new_nick)  # Inserta el nuevo nick en la misma posición
+                    except ValueError:
+                        pass  # Si el viejo nick no se encuentra, no hacer nada
                     
                     # Actualizar historial de mensajes
                     for target in list(self.message_history.keys()):
-                        updated_messages = []
-                        for sender, msg in self.message_history[target]:
-                            if sender == old_nick:
-                                updated_messages.append((new_nick, msg))
-                            else:
-                                updated_messages.append((sender, msg))
-                        self.message_history[target] = updated_messages
-                    
+                        if old_nick in self.message_history[target]:
+                            # Crear una nueva lista de mensajes con el nuevo nick
+                            updated_messages = []
+                            for sender, msg in self.message_history[target]:
+                                if sender == old_nick:
+                                    updated_messages.append((new_nick, msg))
+                                else:
+                                    updated_messages.append((sender, msg))
+                            self.message_history[target] = updated_messages
+                        
                     # Actualizar target activo si es afectado
                     current_target = self.active_target.get()
                     if current_target == f"Usuario: {old_nick}":
                         self.active_target.set(f"Usuario: {new_nick}")
-                        self.update_active_target()  # Forzar actualización de la interfaz
+                        # self.update_active_target()  # Forzar actualización de la interfaz
 
                 # Comandos PRIVMSG/NOTICE (manejo especial)
-                if command in ["PRIVMSG", "NOTICE"]:
+                if command in ["PRIVMSG", "NOTICE", "INVITE"]:
                     if not params:
                         continue
+                    
                     target = params[0]
                     sender = prefix.split('!')[0] if '!' in prefix else "Servidor"
                     
+                    # if sender == self.nick:
+                    #     continue
+
+                    if target.startswith("#"):
+                        sender, target = target, sender
+                
                     # Actualizar historial y notificaciones
                     if target not in self.message_history:
-                        self.message_history[target] = []
-                    self.message_history[target].append((sender, trailing))
-                    self.new_message_indicators[target] = True
+                        self.message_history[sender] = []
+                    self.message_history[sender].append((sender, trailing))
+                    # self.new_message_indicators[sender] = True
 
                     # Actualizar UI si es el target activo
-                    if target == self.active_target.get():
+                    if sender == self.active_target.get():
                         self.display_message(trailing, sender)
-                    else:
-                        self.signal_new_message(target)
+                    # else:
+                    #     self.signal_new_message(sender)
 
                 # Todos los demás comandos van al historial del servidor
                 elif command not in handled_commands:
                     if "Servidor" not in self.message_history:
                         self.message_history["Servidor"] = []
                     self.message_history["Servidor"].append(("Servidor", display_text))
-                    self.new_message_indicators["Servidor"] = True
+                    # self.new_message_indicators["Servidor"] = True
 
                     if self.active_target.get() == "Servidor":
                         self.display_message(display_text, "Servidor")
-                    else:
-                        self.signal_new_message("Servidor")
+                    # else:
+                    #     self.signal_new_message("Servidor")
 
             except IndexError as e:
                 print(f"Error de índice en mensaje: {raw_message}")
@@ -1419,12 +1511,28 @@ class MainView(tk.Tk):
         # Limpiar la lista temporal del canal
         del self.temp_channel_users[channel]
 
-    def _update_context_menu(self):
-        """Actualiza la información en el menú contextual."""
-        if hasattr(self, "context_menu"):
-            for widget in self.context_menu.winfo_children():
-                if isinstance(widget, tk.Label):
-                    widget.config(text=self.context_menu_info)
+    # def _update_context_menu(self):
+    #     """Actualiza la información en el menú contextual."""
+    #     if hasattr(self, "context_menu"):
+    #         for widget in self.context_menu.winfo_children():
+    #             if isinstance(widget, tk.Label):
+    #                 widget.config(text=self.context_menu_info)
+
+    def join_channel(self):
+        channel = self.active_target.get().split("Canal: ")[1]
+
+        def execute_join():
+            """Ejecuta el comando JOIN en un hilo separado."""
+            try:
+                self.connection.join_channel(channel)
+                messagebox.showinfo("Notificación", f"Te has unido al canal {channel}.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo unir al canal: {e}")
+
+        # Crear un hilo para ejecutar el comando
+        thread = threading.Thread(target=execute_join, daemon=True)
+        thread.start()
+
 
 
 # Prueba independiente de la vista principal
