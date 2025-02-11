@@ -1,6 +1,6 @@
 import threading
 from client_network import ClientConnection
-from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT
+from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT,response_patterns
 from Common.custom_errors import IRCConnectionError
 import time
 
@@ -22,98 +22,11 @@ def execute_command(connection, command, argument, nick):
     """
     Ejecuta un comando específico en la conexión IRC.
     """
-    response_patterns = {
-    "/nick": f":.* NICK :{argument}",
-    "/join": f":.* JOIN :{argument}",
-    "/part": f":.* PART :{argument}",
-    "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0] if argument else ''}",
-    "/notice": f":{nick}!.* NOTICE {argument.split()[0] if argument else ''}",
-    "/quit": "ERROR :Closing link",
-    "/mode": r" MODE ",
-    "/topic": (r" TOPIC ", r" 331 ", r" 332 "),
-    "/names": (r' 353 ', r' 366 '),
-    "/list": (r' 322 ', r' 323 '),
-    "/invite": r" INVITE ",
-    "/kick": r" KICK ",
-    "/who": (r' 352 ', r' 315 '),
-    "/whois": (r' 311 ', r' 318 '),  
-    "/whowas": (r' 314 ', r' 369 '), 
-    "/oper": r" 381 ",
-    "/kill": r" KILL ",
-    "/wallops": r" WALLOPS ",
-    "/version": r" 351 ",
-    "/stats": r" 248 ",
-    "/links": (r' 364 ', r' 365 '),
-    "/time": r" 391 ",
-    "/admin": (r' 256 ', r' 259 '),
-    "/info": (r' 371 ', r' 374 '),
-    "/trace": r" 200 ",
-    "/connect": r" CONNECT ",
-    "/squit": r" SQUIT ",
-    "/ping": r" PONG ",
-    "/pong": r" PING ",
-    "/away": r" 306 ",
-    "/rehash": r" REHASH ",
-    "/die": r" DIE ",
-    "/restart": r" RESTART ",
-    "/userhost": r" 302 ",
-    "/ison": r" 303 ",
-    "/service": r" 383 ",
-    "/motd": (r' 375 ', r' 376 '),
-    "/lusers": (r' 251 ', r' 266 '),
-    "/servlist": (r' 234 ', r' 235 '),
-    "/squery": r" SQUERY ",
-    "/summon": r" 342 ",
-    "/users": (r' 392 ', r' 395 '),
-    "ERROR": {
-        "401": "No existe canal/nickname",
-        "402": "No existe el servidor",
-        "403": "No existe el canal",
-        "404": "No puedes enviar al canal",
-        "405": "Te has unido a demasiados canales",
-        "406": "No existió el nickname",
-        "407": "Demasiados objetivos",
-        "408": "No existe el servicio",
-        "421": "Comando desconocido",
-        "422": "No se pudo abrir archivo MOTD/No hay MOTD",
-        "423": "No hay información administrativa",
-        "431": "Falta nickname",
-        "432": "Nickname inválido",
-        "433": "Nickname ya está en uso",
-        "437": "Nickname/canal no disponible temporalmente",
-        "441": "El usuario objetivo no está en el canal",
-        "442": "No estás en el canal",
-        "443": "El usuario ya pertenece al canal",
-        "444": "Usuario no logeado",
-        "445": "Servidor no soporta SUMMON",
-        "446": "Servidor no soporta USERS",
-        "461": "Faltan parámetros",
-        "462": "Ya registrado",
-        "464": "Contraseña incorrecta",
-        "465": "Exiliado del servidor",
-        "471": "No puedes unirte al canal(canal lleno)",
-        "473": "No puedes unirte al canal(solo con invitación)",
-        "474": "No puedes unirte al canal(exiliado del canal)",
-        "475": "No puedes unirte al canal(+k)",
-        "476": "Nombre de canal inválido",
-        "477": "El canal no soporta modos",
-        "482": "No tienes permiso para realizar esta acción",
-        "481": "Necesitas privilegios de operador",
-        "483": "No puedes matar un servidor",
-        "484": "Conexión restringida",
-        "485": "No eres el operador original del canal",
-        "491": "Credenciales incorrectas",
-        "501": "Modo no reconocido",
-        "502": "No puedes cambiar el modo de otro usuario(fuera de un canal)"
-    }
-}
-
-
     try:
         if command == "/topic":
             patterns = (r" TOPIC ", r" 331 ", r" 332 ")  # Capturar cambios y consultas de topic
             connection.set_expected_response(command, patterns, None)
-        elif command in ["/list", "/names", "/who", "/whois", "/whowas", "/motd", "/lusers", "/servlist", "/users", "/links", "/admin", "/info"]:
+        elif command in ["/list", "/names", "/who", "/whois", "/whowas", "/motd", "/lusers", "/servlist", "/users", "/links", "/admin", "/info", "/stats", "/trace"]:
             pattern, terminator = response_patterns[command]
             connection.set_expected_response(command, pattern, terminator)
         elif command in response_patterns:
@@ -335,98 +248,12 @@ def execute_command(connection, command, argument, nick):
     
 def format_response(command, argument, nick, server_response):
     """Convierte la respuesta del servidor al formato esperado por el test."""
-    #print(argument)
-    response_patterns = {
-    "/nick": f":.* NICK {argument}",
-    "/join": f":.* JOIN {argument}",
-    "/part": f":.* PART {argument}",
-    "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0] if argument else ''}",
-    "/notice": f":{nick}!.* NOTICE {argument.split()[0] if argument else ''}",
-    "/quit": "ERROR :Closing link",
-    "/mode": r" MODE ",
-    "/topic": r" TOPIC ",
-    "/names": (r' 353 ', r' 366 '),
-    "/list": (r' 322 ', r' 323 '),
-    "/invite": r" INVITE ",
-    "/kick": r" KICK ",
-    "/who": (r' 352 ', r' 315 '),
-    "/whois": (r' 311 ', r' 318 '),
-    "/whowas": r" 314 ",
-    "/oper": r" 381 ",
-    "/kill": r" KILL ",
-    "/wallops": r" WALLOPS ",
-    "/version": r" 351 ",
-    "/stats": r" 248 ",
-    "/links": r" 364 ",
-    "/time": r" 391 ",
-    "/admin": r" 256 ",
-    "/info": r" 371 ",
-    "/trace": r" 200 ",
-    "/connect": r" CONNECT ",
-    "/squit": r" SQUIT ",
-    "/ping": r" PONG ",
-    "/pong": r" PING ",
-    "/away": r" 306 ",
-    "/rehash": r" REHASH ",
-    "/die": r" DIE ",
-    "/restart": r" RESTART ",
-    "/userhost": r" 302 ",
-    "/ison": r" 303 ",
-    "/service": r" 383 ",
-    "/motd": (r' 375 ', r' 376 '),
-    "/lusers": (r' 251 ', r' 266 '),
-    "/servlist": (r' 234 ', r' 235 '),
-    "/squery": r" SQUERY ",
-    "/summon": r" 342 ",
-    "/users": (r' 392 ', r' 395 '),
-    "ERROR": {
-        "401": "No existe canal/nickname",
-        "402": "No existe el servidor",
-        "403": "No existe el canal",
-        "404": "No puedes enviar al canal",
-        "405": "Te has unido a demasiados canales",
-        "406": "No existió el nickname",
-        "407": "Demasiados objetivos",
-        "408": "No existe el servicio",
-        "421": "Comando desconocido",
-        "422": "No se pudo abrir archivo MOTD/No hay MOTD",
-        "423": "No hay información administrativa",
-        "431": "Falta nickname",
-        "432": "Nickname inválido",
-        "433": "Nickname ya está en uso",
-        "437": "Nickname/canal no disponible temporalmente",
-        "441": "El usuario objetivo no está en el canal",
-        "442": "No estás en el canal",
-        "443": "El usuario ya pertenece al canal",
-        "444": "Usuario no logeado",
-        "445": "Servidor no soporta SUMMON",
-        "446": "Servidor no soporta USERS",
-        "461": "Faltan parámetros",
-        "462": "Ya registrado",
-        "464": "Contraseña incorrecta",
-        "465": "Exiliado del servidor",
-        "471": "No puedes unirte al canal(canal lleno)",
-        "473": "No puedes unirte al canal(solo con invitación)",
-        "474": "No puedes unirte al canal(exiliado del canal)",
-        "475": "No puedes unirte al canal(+k)",
-        "476": "Nombre de canal inválido",
-        "477": "El canal no soporta modos",
-        "482": "No tienes permiso para realizar esta acción",
-        "481": "Necesitas privilegios de operador",
-        "483": "No puedes matar un servidor",
-        "484": "Conexión restringida",
-        "485": "No eres el operador original del canal",
-        "491": "Credenciales incorrectas",
-        "501": "Modo no reconocido",
-        "502": "No puedes cambiar el modo de otro usuario(fuera de un canal)"
-    }
-}
+    
     if isinstance(server_response, list) and len(server_response)==1:
         server_response = " ".join(server_response)
 
     error_messages = response_patterns.get("ERROR", {})
     formatted = []
-    #print(f"server {server_response}")
     if isinstance(server_response, str):
         parts = server_response.split()
         if len(parts) > 1 and parts[1].isdigit() and parts[1] in response_patterns["ERROR"]:
@@ -487,7 +314,6 @@ def format_response(command, argument, nick, server_response):
                 server_response = server_response.split("\r\n")  # Asegurar que se divida en líneas correctamente
 
             for response in server_response:
-                #print(f"Procesando línea de LIST: {response}")  # Depuración
                 if " 322 " in response:
                     parts = response.split()
                     if len(parts) >= 6:
@@ -500,20 +326,21 @@ def format_response(command, argument, nick, server_response):
 
         elif command == "/info":
             formatted = []
-            if isinstance(server_response, str):  
-                server_response = server_response.split("\r\n")  # Asegurar que se divida en líneas correctamente
-                
-            for response in server_response:
-                if " 371 " in response:
-                        formatted.append(response)
+            if isinstance(server_response, str):
+                server_response = server_response.split("\r\n")
 
-            return "\n".join(formatted) if formatted else "No se encontraron canales."
+            for response in server_response:
+                parts = response.split(":", 2)
+                if len(parts) > 2:
+                    formatted.append(parts[2].strip())  # Extrae solo el contenido útil
+
+            return "Información del servidor:\n" + "\n".join(formatted) if formatted else "No hay información del servidor disponible."
+        
         elif command == "/names":
             formatted = []
             if isinstance(server_response, str):  
                 server_response = server_response.split("\n")
             for response in server_response:
-                #print(f"Procesando línea de NAMES: {response}")  # Depuración
                 if " 353 " in response:  # Mensaje de nombres en el canal
                     parts = response.split(":", 2)  # Divide en tres partes para asegurarse de capturar bien los nombres
                     if len(parts) > 2:
@@ -528,14 +355,13 @@ def format_response(command, argument, nick, server_response):
                 server_response = server_response.split("\r\n")  # Convertirlo en lista si es necesario
 
             for response in server_response:
-                #print(f"Procesando línea de WHO: {response}")  # Depuración
                 if " 352 " in response:
                     parts = response.split()
                     if len(parts) >= 10:
                         username = parts[7]
                         channel = parts[3]
-                        ip = parts[4]
-                        real_name = " ".join(parts[9:])  # Captura el nombre real al final
+                        ip = parts[5]
+                        real_name = " ".join(parts[9:]).lstrip(":")  # Captura el nombre real al final
                         formatted.append(f"Usuario: {username} - Canal: {channel} - IP: {ip} - Nombre: {real_name}")
 
             return "\n".join(formatted) if formatted else "No se encontraron usuarios."
@@ -547,7 +373,6 @@ def format_response(command, argument, nick, server_response):
                 server_response = server_response.split("\r\n")  # Asegurar que se divida correctamente
 
             for response in server_response:
-                #print(f"Procesando línea de WHOIS: {response}")  # Depuración
                 parts = response.split()
                 if len(parts) >= 5:
                     if "311" in parts[1]:  # Información del usuario
@@ -568,7 +393,6 @@ def format_response(command, argument, nick, server_response):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
-                #print(f"Procesando línea de WHOWAS: {response}")  # Depuración
                 parts = response.split()
                 if len(parts) >= 5:
                     if "314" in parts[1]:  # Información del usuario desconectado
@@ -586,7 +410,6 @@ def format_response(command, argument, nick, server_response):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
-                #print(f"Procesando línea de LINKS: {response}")  # Depuración
                 parts = response.split()
                 if len(parts) >= 6 and "364" in parts[1]:  # Verifica que sea una línea válida
                     server_name = parts[3]
@@ -598,16 +421,15 @@ def format_response(command, argument, nick, server_response):
         
         elif command == "/admin":
             formatted = []
-            if isinstance(server_response, str):  
+            if isinstance(server_response, str):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
-                #print(f"Procesando línea de ADMIN: {response}")  # Depuración
-                parts = response.split(":", 1)  # Separa por `:` para extraer la información
-                if len(parts) > 1:
-                    formatted.append(parts[1].strip())  # Guarda solo la parte importante
+                parts = response.split(":", 2)  # Asegura que no se pierde información después del primer ":"
+                if len(parts) > 2:
+                    formatted.append(parts[2].strip())  # Extrae solo la información relevante
 
-            return "\n".join(formatted) if formatted else "No hay información de administración."
+            return "Información del administrador:\n" + "\n".join(formatted) if formatted else "No hay información administrativa disponible."
         
         elif command == "/motd":
             formatted = []
@@ -616,7 +438,6 @@ def format_response(command, argument, nick, server_response):
 
             is_motd = False  # Bandera para saber cuándo empezar a capturar
             for response in server_response:
-                #print(f"Procesando línea de MOTD: {response}")  # Depuración
                 parts = response.split(":", 2)  # Divide en tres partes para asegurar la captura del mensaje
 
                 # Detectar inicio del MOTD
@@ -633,23 +454,22 @@ def format_response(command, argument, nick, server_response):
                 # Detectar final del MOTD (`376`) y detener la captura
                 if "376" in response:
                     formatted.append("Fin del mensaje del día.")  
-                    break  # Salimos del bucle, ya no necesitamos seguir procesando
+                    break  
 
             return "\n".join(formatted) if formatted else "No hay mensaje del día."
         
         
         elif command == "/lusers":
             formatted = []
-            if isinstance(server_response, str):  
+            if isinstance(server_response, str):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
-                #print(f"Procesando línea de LUSERS: {response}")  # Depuración
-                parts = response.split(":", 1)  # Separa por `:` para extraer la información
-                if len(parts) > 1:
-                    formatted.append(parts[1].strip())
+                parts = response.split(":", 2)
+                if len(parts) > 2:
+                    formatted.append(parts[2].strip())  # Extrae los datos relevantes
 
-            return "Estadísticas del servidor:\n" + "\n".join(formatted) if formatted else "No hay información de usuarios."
+            return "Estadísticas del servidor:\n" + "\n".join(formatted) if formatted else "No se encontraron estadísticas."
         
         elif command == "/servlist":
             formatted = []
@@ -657,7 +477,6 @@ def format_response(command, argument, nick, server_response):
                 server_response = server_response.split("\r\n")
 
             for response in server_response:
-                #print(f"Procesando línea de SERVLIST: {response}")  # Depuración
                 parts = response.split()
                 if len(parts) >= 6 and "234" in parts[1]:  # Verifica que sea una línea válida
                     service_name = parts[3]
@@ -665,10 +484,64 @@ def format_response(command, argument, nick, server_response):
                     formatted.append(f"Servicio: {service_name} - Descripción: {description}")
 
             return "\n".join(formatted) if formatted else "No hay servicios disponibles."
+        
+        elif command == "/stats":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\r\n")  # Asegurar que se divida correctamente
 
+            for response in server_response:
+                parts = response.split()
+                if len(parts) < 2:
+                    continue
+                
+                # Diferentes tipos de respuestas de STATS
+                if "211" in parts[1]:  # Estadísticas de tráfico
+                    formatted.append(f"Estadísticas de tráfico: {' '.join(parts[2:])}")
+                elif "212" in parts[1]:  # Estadísticas de comandos
+                    formatted.append(f"Estadísticas de comando {parts[2]}: {' '.join(parts[3:])}")
+                elif "219" in parts[1]:  # Fin de la lista de estadísticas
+                    formatted.append("Fin de las estadísticas.")
+                elif "249" in parts[1]:  # Información adicional
+                    formatted.append(f"Información adicional: {' '.join(parts[2:])}")
 
+            return "\n".join(formatted) if formatted else "No hay estadísticas disponibles."
 
+        elif command == "/trace":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\r\n")  
 
+            for response in server_response:
+                parts = response.split()
+                if len(parts) < 2:
+                    continue
+                
+                if parts[1] in ["200", "201", "202", "203", "204", "205", "206", "208", "261", "262"]:
+                    formatted.append(f"Ruta de conexión: {' '.join(parts[2:])}")
+
+            return "\n".join(formatted) if formatted else "No se encontró información de trazado."
+
+        elif command == "/users":
+            formatted = []
+            if isinstance(server_response, str):  
+                server_response = server_response.split("\r\n")  
+
+            for response in server_response:
+                parts = response.split()
+                if len(parts) < 2:
+                    continue
+
+                if "392" in parts[1]:  # Inicio de la lista de usuarios
+                    formatted.append("Usuarios conectados:")
+                elif "393" in parts[1]:  # Información de usuario
+                    formatted.append(f"Usuario: {' '.join(parts[2:])}")
+                elif "394" in parts[1]:  # Información adicional de usuario
+                    formatted.append(f"Detalles: {' '.join(parts[2:])}")
+                elif "395" in parts[1]:  # Fin de la lista de usuarios
+                    formatted.append("Fin de la lista de usuarios.")
+
+            return "\n".join(formatted) if formatted else "No se encontraron usuarios conectados."
 
                 
     mapping = {
