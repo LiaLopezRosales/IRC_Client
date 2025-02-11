@@ -7,7 +7,7 @@ import time
 from Common.irc_protocol import build_message, parse_message
 from Common.custom_errors import IRCConnectionError
 from Common.custom_errors import ProtocolError
-import re
+#import re
 response_patterns = {
     "ERROR": {
         "401": "No existe canal/nickname",
@@ -231,7 +231,7 @@ class ClientConnection:
                             continue
 
                         if self.command == "/topic":
-                            if any(re.search(code, line) for code in self.expected_response):
+                            if any(code in line for code in self.expected_response):
                                 #print(f"Coincidencia con expected_response para {self.command}: {line}")
                                 self.multi_response_buffer.append(line)
 
@@ -246,14 +246,14 @@ class ClientConnection:
 
                             # Manejar respuestas esperadas
                             if self.command in expected_codes:
-                                if any(re.search(code, line) for code in expected_codes[self.command]):
+                                if any(code in line for code in expected_codes[self.command]):
                                     #print(f"Coincidencia con expected_response para {self.command}: {line}")
                                     self.multi_response_buffer.append(line)
-                                if self.response_terminator and re.search(self.response_terminator, line):
+                                if self.response_terminator and self.response_terminator in line:
                                     #print(f"Fin de respuesta múltiple detectado: {line}")
                                     self.response_received.set()
                             else:
-                                if self.expected_response and re.search(self.expected_response, line):
+                                if self.expected_response and self.expected_response in line:
                                     #print(f"Coincidencia con expected_response: {self.expected_response}")
                                     self.multi_response_buffer.append(line)  # Almacenar la línea correctamente
 
@@ -264,7 +264,7 @@ class ClientConnection:
                                         continue
 
                                 # Si llega el terminador (`366` para /NAMES, `315` para /WHO), finaliza la respuesta múltiple
-                                if self.response_terminator and re.search(self.response_terminator, line):
+                                if self.response_terminator and self.response_terminator in line:
                                     #print(f"Fin de respuesta múltiple detectado: {line}")
                                     self.response_received.set()
 

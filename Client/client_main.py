@@ -23,11 +23,11 @@ def execute_command(connection, command, argument, nick):
     Ejecuta un comando específico en la conexión IRC.
     """
     response_patterns = {
-    "/nick": f":.* NICK :{argument}",
-    "/join": f":.* JOIN :{argument}",
-    "/part": f":.* PART :{argument}",
-    "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0] if argument else ''}",
-    "/notice": f":{nick}!.* NOTICE {argument.split()[0] if argument else ''}",
+    "/nick": r" NICK ",
+    "/join": r" JOIN ",
+    "/part": r" PART ",
+    "/privmsg": r" PRIVMSG ",
+    "/notice": r" NOTICE ",
     "/quit": "ERROR :Closing link",
     "/mode": r" MODE ",
     "/topic": (r" TOPIC ", r" 331 ", r" 332 "),
@@ -337,48 +337,6 @@ def format_response(command, argument, nick, server_response):
     """Convierte la respuesta del servidor al formato esperado por el test."""
     #print(argument)
     response_patterns = {
-    "/nick": f":.* NICK {argument}",
-    "/join": f":.* JOIN {argument}",
-    "/part": f":.* PART {argument}",
-    "/privmsg": f":{nick}!.* PRIVMSG {argument.split()[0] if argument else ''}",
-    "/notice": f":{nick}!.* NOTICE {argument.split()[0] if argument else ''}",
-    "/quit": "ERROR :Closing link",
-    "/mode": r" MODE ",
-    "/topic": r" TOPIC ",
-    "/names": (r' 353 ', r' 366 '),
-    "/list": (r' 322 ', r' 323 '),
-    "/invite": r" INVITE ",
-    "/kick": r" KICK ",
-    "/who": (r' 352 ', r' 315 '),
-    "/whois": (r' 311 ', r' 318 '),
-    "/whowas": r" 314 ",
-    "/oper": r" 381 ",
-    "/kill": r" KILL ",
-    "/wallops": r" WALLOPS ",
-    "/version": r" 351 ",
-    "/stats": r" 248 ",
-    "/links": r" 364 ",
-    "/time": r" 391 ",
-    "/admin": r" 256 ",
-    "/info": r" 371 ",
-    "/trace": r" 200 ",
-    "/connect": r" CONNECT ",
-    "/squit": r" SQUIT ",
-    "/ping": r" PONG ",
-    "/pong": r" PING ",
-    "/away": r" 306 ",
-    "/rehash": r" REHASH ",
-    "/die": r" DIE ",
-    "/restart": r" RESTART ",
-    "/userhost": r" 302 ",
-    "/ison": r" 303 ",
-    "/service": r" 383 ",
-    "/motd": (r' 375 ', r' 376 '),
-    "/lusers": (r' 251 ', r' 266 '),
-    "/servlist": (r' 234 ', r' 235 '),
-    "/squery": r" SQUERY ",
-    "/summon": r" 342 ",
-    "/users": (r' 392 ', r' 395 '),
     "ERROR": {
         "401": "No existe canal/nickname",
         "402": "No existe el servidor",
@@ -665,11 +623,6 @@ def format_response(command, argument, nick, server_response):
                     formatted.append(f"Servicio: {service_name} - Descripción: {description}")
 
             return "\n".join(formatted) if formatted else "No hay servicios disponibles."
-
-
-
-
-
                 
     mapping = {
         "/nick": f"Tu nuevo apodo es {argument}",
