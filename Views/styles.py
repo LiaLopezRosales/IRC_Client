@@ -1,3 +1,5 @@
+# Views.styles.py
+
 # Archivo para definir colores, fuentes y tamaños personalizables
 STYLE = {
     "bg_color": "#1e1e2f",

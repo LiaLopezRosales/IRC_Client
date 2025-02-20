@@ -1,3 +1,5 @@
+# Server.irc_server.py
+
 import socket
 import ssl
 from threading import Thread
@@ -45,9 +47,9 @@ class IRCServer:
             for nick, data in list(self.clients.items()):
                 try:
                     # Usar el nombre del servidor como token
-                    token = str(uuid.uuid4())  # Genera un UUID único para cada PING
+                    token = "mock.server"  # Usar un token fijo para simplificar (en lugar de UUID)
                     data["socket"].sendall(f"PING :{token}\r\n".encode("utf-8"))
-                    data["ping_token"] = token  # Almacenar el nombre del servidor
+                    data["ping_token"] = token
                     data["last_ping_sent"] = current_time
                 except Exception as e:
                     print(f"[ERROR] Error enviando PING a {nick}: {e}")
@@ -98,10 +100,11 @@ class IRCServer:
                 print(f"[SERVER] Cliente conectado desde {addr}")
 
                 # Configurar SSL
-                context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-                context.load_cert_chain(certfile="server.crt", keyfile="server.key")
+                #context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                #context.load_cert_chain(certfile="server.crt", keyfile="server.key")
 
-                ssl_socket = context.wrap_socket(client_socket, server_side=True)
+                #ssl_socket = context.wrap_socket(client_socket, server_side=True)
+                ssl_socket=client_socket
                 Thread(target=self._handle_client, args=(ssl_socket, addr), daemon=True).start()
             except Exception as e:
                 print(f"[ERROR] Error al aceptar cliente: {e}")
@@ -132,13 +135,21 @@ class IRCServer:
         """
         try:
             nickname = None
+            buffer = ""
             while self.running:
-                data = ssl_socket.recv(4096).decode('utf-8').strip()
+                data = ssl_socket.recv(4096).decode('utf-8', errors='ignore')
                 if not data:
                     break
+                buffer += data
+                while '\r\n' in buffer:
+                    line, buffer = buffer.split('\r\n', 1)
+                    line = line.strip()
+                    if not line:
+                        continue
 
-                print(f"[SERVER] Mensaje recibido: {data}")
-
+                    print(f"[SERVER] Mensaje recibido: {line}")
+            
+            
                 # Procesar comandos
                 if data.startswith("NICK"):
                     parts = data.split()
@@ -194,12 +205,13 @@ class IRCServer:
                             self._complete_registration(new_nick, ssl_socket)
     
                 elif data.startswith("USER"):
+                    print("4")
                     parts = data.split()
                     if len(parts) < 5:
                         ssl_socket.sendall(f":mock.server 461 {nickname} USER :Faltan parámetros\r\n".encode('utf-8'))
                         print("[SERVER] Comando USER rechazado: Faltan parámetros")
                         continue
-
+                    print("1")
                     username = parts[1]
                     realname = " ".join(parts[4:])[1:]  # Nombre real sin el ":"
                     self.pending_users[ssl_socket] = {
@@ -208,6 +220,7 @@ class IRCServer:
                     }
 
                     if nickname and nickname in self.clients:
+                        print("2")
                         self._complete_registration(nickname, ssl_socket)
                     else:
                         ssl_socket.sendall(f":mock.server 451 * :Debes registrar un NICK primero\r\n".encode('utf-8'))
@@ -227,7 +240,7 @@ class IRCServer:
                     
                 elif data.startswith("JOIN"):
                     parts = data.split()
-                    if len(parts) < 2:
+                    if len(parts) < 2 or parts[1].strip() == ":":
                         ssl_socket.sendall(f":mock.server 461 {nickname} JOIN :Faltan parámetros\r\n".encode('utf-8'))
                         continue
 
@@ -653,9 +666,12 @@ class IRCServer:
                         f":mock.server 351 {nickname} mock.irc.server-1.0 mock.server :Python IRC Server\r\n"
                     )
                     ssl_socket.sendall(version_response.encode("utf-8"))
-                elif data.startswith("CAP"):
-                    # Manejar CAP LS (necesario para clientes modernos)
+                elif data.startswith("CAP LS"):
+                    # Enviar lista de capacidades (aunque esté vacía)
                     ssl_socket.sendall(b":mock.server CAP * LS :\r\n")
+                
+                elif data.startswith("CAP END"):
+                    ssl_socket.sendall(b":mock.server CAP * ACK :\r\n")  # Confirmar fin de CAP
                     
                 elif data.startswith("STATS"):
                     parts = data.split()
@@ -732,6 +748,8 @@ class IRCServer:
                 else:
                     ssl_socket.sendall(b":mock.server 421 Unknown command\r\n")
                     print(f"[SERVER] Comando desconocido recibido: {data}")
+
+            
 
         except Exception as e:
             print(f"[ERROR] Error con cliente {addr}: {e}")

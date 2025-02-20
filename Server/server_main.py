@@ -1,8 +1,10 @@
+# Server.server_main.py
+
 from Server.irc_server import IRCServer
 import time
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 4094
+DEFAULT_PORT = 8080
 
 def run_server():
     try:

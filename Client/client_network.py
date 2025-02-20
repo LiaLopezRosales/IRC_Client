@@ -1,4 +1,4 @@
-# client_network.py
+# Client.client_network.py
 
 import socket
 import threading
@@ -7,7 +7,7 @@ import time
 from Common.irc_protocol import build_message, parse_message
 from Common.custom_errors import IRCConnectionError
 from Common.custom_errors import ProtocolError
-#import re
+
 response_patterns = {
     "ERROR": {
         "401": "No existe canal/nickname",

@@ -1,4 +1,4 @@
-#custom_errors.py
+# Common.custom_errors.py
 
 class IRCConnectionError(Exception):
     """Error en la conexión al servidor."""

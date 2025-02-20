@@ -1,7 +1,9 @@
+# View.interphase.py
+
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, simpledialog
 import textwrap
-from client_network import ClientConnection
+from Client.client_network import ClientConnection
 from Common.shared_constants import DEFAULT_HOST, DEFAULT_PORT
 import threading
 from Common.custom_errors import ProtocolError
@@ -208,7 +210,7 @@ class MainView(tk.Tk):
         self.send_button.pack(side="right", padx=5, pady=5)
 
     def display_message(self, message, sender="self"):
-        """Muestra mensajes con formato mejorado: izquierda y multilínea."""
+        """Muestra mensajes con formato mejorado: izquierda y multi-línea."""
         self.chat_history.config(state="normal")
 
         # Definir un límite de ancho 
@@ -392,7 +394,7 @@ class MainView(tk.Tk):
                 else:
                     messagebox.showerror("Error", "Debes completar el campo")
         else:
-            messagebox.showerror("Error", "Debes autenticarte primero") 
+            messagebox.showerror("Error", "Debe autenticarse primero") 
         
     def server_info_action(self):
         """Solicita y muestra la versión del servidor IRC."""
@@ -471,7 +473,7 @@ class MainView(tk.Tk):
     def connect_action(self):
         """Solicitar servidor y puerto en un solo formulario."""
         if not self.is_authenticated:
-            messagebox.showerror("Conectar", "Debes autenticarte primero")
+            messagebox.showerror("Conectar", "Debe autenticarse primero")
             return
         
         connect_window = tk.Toplevel(self)
@@ -960,7 +962,7 @@ class MainView(tk.Tk):
                 messagebox.showerror("Error", "El comando no puede estar vacío.")
                 return
 
-            if command in ["USER", "PASS", "NICK", "VERSION", "QUIT", "KICK", "JOIN", "PART", "MODE", "TOPIC", "NAMES", "LIST", "INVITE", "PRIVSMG", "WHO", "WHOIS"]:
+            if command in ["USER", "PASS", "NICK", "VERSION", "QUIT", "KICK", "JOIN", "PART", "MODE", "TOPIC", "NAMES", "LIST", "INVITE", "PRIVMSG", "WHO", "WHOIS"]:
                 messagebox.showwarning("Inválido", f"El comando {command}, no está siendo procesado por esta vía")
                 return
 
@@ -994,7 +996,7 @@ class MainView(tk.Tk):
             """Muestra una lista de comandos ejecutables con su estructura."""
             command_list = [
                 # "PASS <password>", 
-                # "USER <username> <hostname> <servername> <realname>",
+                # "USER <username> <hostname> <server_name> <realname>",
                 # "NICK <nickname>", 
                 "OPER <name> <password>", 
                 # "QUIT [<message>]",

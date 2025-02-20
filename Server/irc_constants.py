@@ -1,3 +1,4 @@
+# Server.irc_constants.py
 
 RESPONSES = {
     "JOIN_SUCCESS": ":mock.server 332 {nickname} {channel} :Bienvenido al canal {channel}\r\n",

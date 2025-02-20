@@ -1,4 +1,4 @@
-# irc_protocol.py
+# Common.irc_protocol.py
 
 from Common.custom_errors import ProtocolError
 

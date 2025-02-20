@@ -1,1 +1,0 @@
-##Ya se imprimen todas las líneas pero ahora las funciones server_info_action y server_list_action dejaron de entregar la respuesta correctamente, ahora la ventana dice No se pudo obtener la información: 'generator' object is not subscriptable

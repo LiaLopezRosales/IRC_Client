@@ -1,6 +1,29 @@
 {
-    "cSpell.language": "en,es-ES,es",
+    "cSpell.language": "en,es-ES,es,en-GB",
     "cSpell.words": [
-        "realname"
+        "activebackground",
+        "activeforeground",
+        "activestyle",
+        "deslogueado",
+        "dotbox",
+        "ISON",
+        "linksbox",
+        "listbox",
+        "lmargin",
+        "LUSERS",
+        "OPER",
+        "padx",
+        "pady",
+        "PRIVMSG",
+        "PRIVSMG",
+        "realname",
+        "selectbackground",
+        "SERVLIST",
+        "SQUERY",
+        "textvariable",
+        "USERHOST",
+        "whois",
+        "WHOWAS",
+        "yscrollcommand"
     ]
 }
